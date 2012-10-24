@@ -171,7 +171,7 @@ dhd_customer_gpio_wlan_ctrl(int onoff)
 }
 
 #ifdef GET_CUSTOM_MAC_ENABLE
-#if 1  //def CONFIG_PANMAC // PZ2224_yikyu 20120508 // PZ2224_yikyu 20120717
+#if 0  //def CONFIG_PANMAC // PZ2224_yikyu 20120508 // PZ2224_yikyu 20120717
 static int
 dhd_read_mac_from_file(char *fpath, struct ether_addr *addr)
 {
@@ -190,7 +190,7 @@ dhd_read_mac_from_file(char *fpath, struct ether_addr *addr)
 	len = dhd_os_get_image_block(ethbuf, 32, fp);
 	if ( len < 17 ) /* mac address format xx:xx:xx:xx:xx:xx */
 		goto err;
-	WL_ERROR(("Read mac fail\n"));
+
 	ethbuf[17] = '\0';
 	if (sscanf(ethbuf, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
 			&tmp.octet[0], &tmp.octet[1], &tmp.octet[2],
@@ -219,7 +219,7 @@ dhd_write_mac_to_file(char *fpath, struct ether_addr *addr)
 	fp = filp_open(fpath, O_CREAT | O_RDWR, 0666);
 	if (IS_ERR(fp))
 		return -1;
-	WL_ERROR(("Write mac fail\n"));
+
 	sprintf(ethbuf, "%02x:%02x:%02x:%02x:%02x:%02x",
 			addr->octet[0], addr->octet[1], addr->octet[2],
 			addr->octet[3], addr->octet[4], addr->octet[5]);
@@ -258,7 +258,7 @@ dhd_custom_get_mac_address(unsigned char *buf)
 	}
 #endif /* EXAMPLE_GET_MAC */
 
-#if 1 //def CONFIG_PANMAC // PZ2224_yikyu 20120508 // PZ2224_yikyu 20120717
+#if 0 //def CONFIG_PANMAC // PZ2224_yikyu 20120508 // PZ2224_yikyu 20120717
 	{
 		char panmac_path[] = "/dev/panmac";
 		static struct ether_addr mac;

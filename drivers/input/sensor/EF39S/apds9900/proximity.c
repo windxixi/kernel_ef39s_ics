@@ -33,7 +33,7 @@
 /* -------------------------------------------------------------------- */
 /* debug option */
 /* -------------------------------------------------------------------- */
-#define SENSOR_SKY_PS_DBG_ENABLE
+//#define SENSOR_SKY_PS_DBG_ENABLE
 #ifdef SENSOR_SKY_PS_DBG_ENABLE
 #define dbg(fmt, args...)   printk("[PS] " fmt, ##args)
 #else
@@ -186,7 +186,6 @@ static ssize_t sensor_delay_store(struct device *dev, struct device_attribute *a
     else if (delay > SENSOR_MAX_DELAY) {
         delay = SENSOR_MAX_DELAY;
     }
-	delay =20;
 	sensor_set_delay(dev, delay);
 
 	dbg_func_out();
@@ -338,7 +337,7 @@ static int sensor_probe(struct platform_device *pdev)
     }
 
 	atomic_set(&sensordata->enable, 0);
-	atomic_set(&sensordata->delay, SENSOR_MIN_DELAY);
+	atomic_set(&sensordata->delay, SENSOR_DEFAULT_DELAY);
 	sensordata->status = 0;
 
     inputdev = input_allocate_device();
