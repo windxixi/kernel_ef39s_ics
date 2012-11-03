@@ -12,184 +12,97 @@
 #include <linux/uaccess.h>
 #include <asm/system.h>
 
-#include <linux/ctype.h> // tolower, isdigit
 
-#define TAG "panmac:"
+#include <mach/rpc_nv.h>
 
-#define PANMAC_MAJOR    60
-#define MAX_MAC_STR_LEN  	(17)
-#define MAX_MAC_LEN		(6)
-static char mac_str_[MAX_MAC_STR_LEN+1]={""};
-module_param_string(mac_addr,mac_str_, sizeof(mac_str_),0640);
-MODULE_PARM_DESC(mac_addr,"mac address in string format. e.g. 00:11:22:33:44:55" );
+#define PANMAC_MAJOR        60
+#define PANMAC_MAC_MAX_LEN  17
 
-static unsigned char mac_addr_[MAX_MAC_LEN];
+#define NV_WLAN_MAC_ADDRESS_I 4678
 
-int panmac_read_mac(unsigned char* mac, int size) {
-	int max = size < MAX_MAC_LEN ? size : MAX_MAC_LEN;
-	if ( mac_addr_[0] == 0 
-		&& mac_addr_[1] == 0 
-		&& mac_addr_[2] == 0 
-		&& mac_addr_[3] == 0 
-		&& mac_addr_[4] == 0 
-		&& mac_addr_[5] == 0 ) {
-		printk(KERN_ERR TAG " mac address not initialized yet\n") ;
-		return 0 ;
-	}
-
-	memcpy(mac, mac_addr_, max) ;
-	return max;
-}
-EXPORT_SYMBOL(panmac_read_mac);
-
-// ascii mac address to mac address
-static int a2m(const char* mac_str, unsigned char* mac_addr) 
-{
-	int a=0;
-	char ch=0;
-	unsigned char num=0;
-
-	for (a=0; a<MAX_MAC_LEN; ++a) {
-		ch = tolower(*mac_str++);
-		if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f')) {
-			printk(KERN_ERR TAG " invalid char in mac '%c'\n", ch ) ;
-			return -1;
-		}
-		num = (isdigit(ch) ? (ch - '0') : (ch - 'a' + 10))*16;
-
-		ch = tolower(*mac_str++);
-		if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f')) {
-			printk(KERN_ERR TAG " invalid char in mac '%c'\n", ch ) ;
-			return -1;
-		}
-		num = num + (isdigit(ch) ? (ch - '0') : (ch - 'a' + 10));
-
-		*mac_addr++= num ;
-
-		ch = *mac_str++;
-		if( !( ch == ':' || ch == '\0')) {
-			printk(KERN_ERR TAG " invalid deliminator '%c'\n", ch); 
-			return -2;
-		}
-	}
-	return 0;
-}
-
-static const char* m2a(const unsigned char* mac_addr, char* mac_str) {
-	sprintf(mac_str, "%02x:%02x:%02x:%02x:%02x:%02x",
-		mac_addr[0],
-		mac_addr[1],
-		mac_addr[2],
-		mac_addr[3],
-		mac_addr[4],
-		mac_addr[5]);
-	return mac_str ;
-}
-
-static void dump_mac_addr(const unsigned char* addr) {
-	char temp[MAX_MAC_STR_LEN+1];
-	printk(KERN_INFO TAG " dump mac addr=%s\n", m2a( addr, temp));
-}
+MODULE_LICENSE("GPL");
 
 static int panmac_open(struct inode *inode, struct file *filp)
 {
-	printk(KERN_INFO TAG " open\n");
-
-	if( strlen(mac_str_) !=0 ) {
-		// update mac address from dd parameter.
-		if( a2m(mac_str_, (unsigned char*)mac_addr_)<0) {
-			printk(KERN_ERR TAG " invalid mac address %s\n", mac_str_) ;
-			return -EINVAL;
-		}
-	}
-	dump_mac_addr(mac_addr_) ;
-	return 0;
+  return 0;
 }
 
 static int panmac_release(struct inode *inode, struct file *filp)
 {
-	printk(KERN_INFO TAG " relelase\n");
-	return 0;
+  return 0;
 }
 
+//lee.eunsuk 20110516 static size_t panmac_read(struct file *filp, char* buf, size_t count, loff_t *f_pos)
 static ssize_t panmac_read(struct file *filp, char* buf, size_t count, loff_t *f_pos)
 {
-	char temp[MAX_MAC_STR_LEN+1];
-	int copy_len=0 ;
+  nv_cmd_item_type item;
+  int rc, result;
+  int copy_len;
+  char temp[PANMAC_MAC_MAX_LEN + 1];
 
-   	printk(KERN_INFO TAG " read\n") ;
+  rc = msm_nv_rpc_connect();
+  if (rc != 0) {
+    printk(KERN_ERR "%s : msm_nv_rpc_connect error(%d)\n", __func__, rc);
+    return 0;
+  }
+  result = msm_nv_read(NV_WLAN_MAC_ADDRESS_I, &item);
+  if (result != 0)
+  {
+    printk(KERN_INFO "msm_nv_read failed (%d)\n", result);
+    return 0;
+  }
+  
+  printk(KERN_INFO "msm_nv_read: %08X %08X\n", item.wlan_mac_address[0], item.wlan_mac_address[1]);
+    
+  sprintf(temp, "%02x:%02x:%02x:%02x:%02x:%02x",
+    (item.wlan_mac_address[0] >> 8)  & 0xFF,
+    (item.wlan_mac_address[0] >> 16) & 0xFF,
+    (item.wlan_mac_address[0] >> 24) & 0xFF,
+    (item.wlan_mac_address[1] >> 16) & 0xFF,
+    (item.wlan_mac_address[1] >> 24) & 0xFF,
+    (item.wlan_mac_address[0])       & 0xFF);
+    
+  copy_len = PANMAC_MAC_MAX_LEN > count ? count: PANMAC_MAC_MAX_LEN;
 
-	m2a(mac_addr_, temp);	
-  	copy_len = count < MAX_MAC_STR_LEN ? count: MAX_MAC_STR_LEN;
-  	if(copy_to_user(buf, temp, copy_len)) {
-		printk(KERN_ERR TAG " failed to copy\n");
-  		return -EFAULT;
- 	} 
-	if (*f_pos == 0)
-	{
-		*f_pos += copy_len;
-		return copy_len;
-	}
-	return 0;
-}
+  if(copy_to_user(buf, temp, copy_len))
+  	return -EFAULT;
+  
+  if (*f_pos == 0)
+  {
+    *f_pos += copy_len;
+    return copy_len;
+  }
 
-static ssize_t panmac_write(struct file* filp, const char* buf, size_t count, loff_t* f_ops) {
-	char user[MAX_MAC_STR_LEN+1];
-	unsigned char mac_addr[MAX_MAC_LEN];
-	int max=0;
-
-   	printk(KERN_INFO TAG " write count=%d\n",count) ;
-	max = count < MAX_MAC_STR_LEN ? count : MAX_MAC_STR_LEN ;
-
-	memset(user, 0, sizeof(user));
-	if(copy_from_user((void*)user, buf, max)) {
-		printk(KERN_ERR TAG " failed to copy parameter\n");
-		return -EFAULT;
-	}
-	printk(KERN_INFO TAG " mac from user %s\n", (char*)user) ;
-	memset(mac_addr, 0, sizeof(mac_addr));
-	if(a2m(user, mac_addr)<0) {
-		return -EINVAL ;
-	}
-	dump_mac_addr(mac_addr) ;
-	memcpy(mac_addr_, mac_addr, MAX_MAC_LEN) ;
-	return max ;
+  return 0;
 }
 
 struct file_operations panmac_fops = {
-	.open = panmac_open,
-	.release = panmac_release,
-	.read = panmac_read,
-	.write = panmac_write,
+  .read = panmac_read,
+  .open = panmac_open,
+  .release = panmac_release,
 };
 
 static int panmac_init(void)
 {
-	int result;
+  int result;
  
-	printk(KERN_INFO TAG " panmac init\n");
+  printk(KERN_INFO "panmac init\n");
 
-	// initialize mac address
-	memset(mac_addr_, 0, sizeof(mac_addr_));
-
-	result = register_chrdev(PANMAC_MAJOR, "panmac", &panmac_fops);
-	if (result < 0)
-	{
-		printk(KERN_INFO "Failed to register chrdev (%d).\n", result);
-		return result;
-	}
-
+  result = register_chrdev(PANMAC_MAJOR, "panmac", &panmac_fops);
+  if (result < 0)
+  {
+    printk(KERN_INFO "Failed to register chrdev (%d).\n", result);
+    return result;
+  }
+  
   return 0;
 }
 
 static void panmac_exit(void)
 {
-	printk(KERN_INFO TAG " panmac exit\n");
-	unregister_chrdev(PANMAC_MAJOR, "panmac");
+  printk(KERN_INFO "panmac exit\n");
+  unregister_chrdev(PANMAC_MAJOR, "panmac");
 }
 
 module_init(panmac_init);
 module_exit(panmac_exit);
-
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Pantech MAC r/w driver");

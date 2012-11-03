@@ -456,7 +456,6 @@
 0x9ebe20b9	inet_ctl_sock_create	vmlinux	EXPORT_SYMBOL_GPL
 0xdf126b53	dev_addr_add_multiple	vmlinux	EXPORT_SYMBOL
 0xa4d899fd	firmware_kobj	vmlinux	EXPORT_SYMBOL_GPL
-0xccb873a1	panmac_read_mac	vmlinux	EXPORT_SYMBOL
 0xcf8cc5ee	msm_bus_scale_unregister_client	vmlinux	EXPORT_SYMBOL
 0x1e6f6963	msm_pm_set_max_sleep_time	vmlinux	EXPORT_SYMBOL
 0x4385c08a	usb_autopm_put_interface_async	vmlinux	EXPORT_SYMBOL_GPL

@@ -5240,55 +5240,6 @@ int wlan_set_carddetect(int val)
 	return 0;
 }
 
-// FEATURE_PANTECH_PANMAC
-#ifdef CONFIG_PANMAC // PZ2224_yikyu 20120717
-extern int panmac_read_mac(unsigned char*,int);
-
-static int wifi_get_mac_addr(unsigned char *buf)
-{
-	int i=0;
-	static unsigned char random_mac[6] = {0x2c, 0x30, 0x68, 0xab, 0xbc, 0xcd};
-	unsigned char temp[6] ;
-	bool use_random_mac=false;
-
-	memset(temp, 0, sizeof(temp));
-
-	if( panmac_read_mac(temp,6) == 6) {
-		if ( buf[0]== 0x00 &&
-			buf[1]== 0x00 &&
-			buf[2]== 0x00 &&
-			buf[3]== 0x00 &&
-			buf[4]== 0x00 &&
-			buf[5]== 0x00 ) {
-			printk(KERN_ERR"MAC address was not initialized\n");
-			use_random_mac=true;
-		} else {
-		memcpy( buf, temp, 6) ;
-		}
-	} else 
-	{
-		//printk(KERN_ERR"panmac_read_mac failed\n");
-		use_random_mac=true;
-	} 
-	if(use_random_mac) { 
-		printk(KERN_INFO"use random MAC\n");
-		for ( i = 3; i < 6; i++ )
-			get_random_bytes(&random_mac[i], 1); 
-		memcpy(buf, random_mac, 6) ;
-	}
-	printk(KERN_INFO"%s(%d) mac addr=%02x:%02x:%02x:%02x:%02x:%02x\n",
-		__FUNCTION__, __LINE__,
-		buf[0],
-		buf[1],
-		buf[2],
-		buf[3],
-		buf[4],
-		buf[5]);
-
-	return 0;
-}
-#endif
-
 static struct resource wlan_resources[] = {
 	[0] = {
 		.name	= "bcmdhd_wlan_irq",
@@ -5302,9 +5253,6 @@ static struct wifi_platform_data  wlan_control = {
 	.set_power	= wlan_power,
 	.set_reset	= wlan_reset,
 	.set_carddetect = wlan_set_carddetect,
-#ifdef CONFIG_PANMAC // PZ2224_yikyu 20120717	
-	.get_mac_addr   = wifi_get_mac_addr,		
-#endif	
 	.mem_prealloc = wifi_mem_prealloc,
 };
 
