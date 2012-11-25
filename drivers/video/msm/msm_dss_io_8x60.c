@@ -334,7 +334,11 @@ void mipi_dsi_phy_init(int panel_ndx, struct msm_panel_info const *panel_info,
 	int i, off;
 
 	MIPI_OUTP(MIPI_DSI_BASE + 0x128, 0x0001);/* start phy sw reset */
+#ifdef CONFIG_F_SKYDISP_QBUG_FIX_MIPI_ERROR
+	msleep(1);    // [PS1] Kang Seong-Goo, confirmed by Qualcomm 100->1
+#else
 	msleep(100);
+#endif
 	MIPI_OUTP(MIPI_DSI_BASE + 0x128, 0x0000);/* end phy w reset */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x2cc, 0x0003);/* regulator_ctrl_0 */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x2d0, 0x0001);/* regulator_ctrl_1 */

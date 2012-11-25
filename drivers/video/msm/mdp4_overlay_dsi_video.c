@@ -24,6 +24,9 @@
 #include <linux/spinlock.h>
 #include <linux/fb.h>
 #include <linux/msm_mdp.h>
+#include <linux/ktime.h>
+#include <linux/wakelock.h>
+#include <linux/time.h>
 #include <asm/system.h>
 #include <asm/mach-types.h>
 #include <mach/hardware.h>
@@ -35,12 +38,16 @@
 #define DSI_VIDEO_BASE	0xE0000
 
 static int first_pixel_start_x;
+#if !defined(CONFIG_F_SKYDISP_FIX_ONE_LINE_YRES)
 static int first_pixel_start_y;
+#endif
 static int dsi_video_enabled;
 static struct mdp4_overlay_pipe *dsi_pipe;
 static struct completion dsi_video_comp;
 
+#ifndef CONFIG_F_SKYDISP_QBUG_FIX_MIPI_ERROR
 static cmd_fxn_t display_on;
+#endif
 #ifndef CONFIG_F_SKYDISP_QBUG_FIX_VIDEO_PLAYBACK_HALT //GCAN 20120712 : For prevent video playback halt, 30155 patch rollback
 static int blt_cfg_changed;
 #endif
@@ -59,10 +66,12 @@ static __u32 msm_fb_line_length(__u32 fb_index, __u32 xres, int bpp)
 		return xres * bpp;
 }
 
+#ifndef CONFIG_F_SKYDISP_QBUG_FIX_MIPI_ERROR
 void mdp4_dsi_video_fxn_register(cmd_fxn_t fxn)
 {
 	display_on = fxn;
 }
+#endif
 static void mdp4_overlay_dsi_video_wait4event(struct msm_fb_data_type *mfd,
 						int intr_done);
 
@@ -213,13 +222,18 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	dsi_underflow_clr = mfd->panel_info.lcdc.underflow_clr;
 	dsi_hsync_skew = mfd->panel_info.lcdc.hsync_skew;
 #ifdef F_SKYDISP_DSI_PADDING
- dsi_width = mfd->panel_info.xres
-  + mfd->panel_info.mipi.xres_pad;
- dsi_height = mfd->panel_info.yres
-  + mfd->panel_info.mipi.yres_pad;
+	dsi_width = mfd->panel_info.xres +
+		mfd->panel_info.mipi.xres_pad;
+#if defined(CONFIG_F_SKYDISP_FIX_ONE_LINE_YRES)
+	dsi_height = mfd->panel_info.yres
+		+ mfd->panel_info.mipi.yres_pad+1;
 #else
- dsi_width = mfd->panel_info.xres;
- dsi_height = mfd->panel_info.yres;
+	dsi_height = mfd->panel_info.yres +
+		mfd->panel_info.mipi.yres_pad;
+#endif
+#else
+	dsi_width = mfd->panel_info.xres;
+	dsi_height = mfd->panel_info.yres;
 #endif
 	dsi_bpp = mfd->panel_info.bpp;
 
@@ -261,15 +275,19 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 		active_hctl = 0;
 	}
 
+#if !defined(CONFIG_F_SKYDISP_FIX_ONE_LINE_YRES)
 	if (dsi_height != var->yres) {
 		active_v_start =
 		    display_v_start + first_pixel_start_y * hsync_period;
 		active_v_end = active_v_start + (var->yres) * hsync_period - 1;
 		active_v_start |= ACTIVE_START_Y_EN;
 	} else {
+#endif
 		active_v_start = 0;
 		active_v_end = 0;
+#if !defined(CONFIG_F_SKYDISP_FIX_ONE_LINE_YRES)
 	}
+#endif
 
 	dsi_underflow_clr |= 0x80000000;	/* enable recovery */
 	hsync_polarity = 0;
@@ -303,15 +321,15 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 
 	ret = panel_next_on(pdev);
 	if (ret == 0) {
-// -> 30155 patch boot logo fail and sleep problem
-		/* enable DSI block */ 
-		MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 1);
-		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-// <- 30155 patch boot logo fail and sleep problem
+		/* enable DSI block */
+			mdp4_overlay_dsi_video_start();
+
+#ifndef CONFIG_F_SKYDISP_QBUG_FIX_MIPI_ERROR
 		if (display_on != NULL) {
 			msleep(50);
 			display_on(pdev);
 		}
+#endif        
 	}
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
@@ -325,16 +343,7 @@ int mdp4_dsi_video_off(struct platform_device *pdev)
 
 #if defined(CONFIG_FB_MSM_MIPI_DSI_SAMSUNG) || defined(CONFIG_FB_MSM_MIPI_DSI_SONY)
 	ret = panel_next_off(pdev);
-	/* p13447 LS2 LCD shinbrad added for sleep current 120515 */
-// -> 30155 patch boot logo fail and sleep problem
-	if(ret == 0)
-	{
-		MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 0);
-		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
-	}
-// -> 30155 patch boot logo fail and sleep problem
 #endif
-
 	/* MDP cmd block enable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 0);
@@ -487,6 +496,94 @@ static void mdp4_dsi_video_blt_dmap_update(struct mdp4_overlay_pipe *pipe)
 }
 
 /*
+ * MDP Timer/Functions
+ * Set up an HR timer to wake up the CPU's just before the return of a VSync
+ * This reduces any latencies that may arise if the CPU's were power collapsed
+ * in between.
+ */
+#define VSYNC_INTERVAL	16
+#define WAKE_DELAY	3 /* 3 ioctls * 600 us = 2ms + 1ms buffer */
+#define MAX_VSYNC_GAP   4 /* Marker to detect whether to skip timer */
+
+/* Move the globals into context data structure for 3.4 upgrade */
+static int first_time = 1;
+static ktime_t last_vsync_time_ns;
+struct hrtimer hr_mdp_timer_pc;
+
+static unsigned long compute_vsync_interval(void)
+{
+	ktime_t currtime_us;
+	unsigned long diff_from_vsync, vsync_interval;
+	/*
+	 * Get interval beween last vsync and current time
+	 * Current time = CPU programming MDP for next Vsync
+	 */
+	currtime_us = ktime_get();
+	diff_from_vsync =
+		(ktime_to_us(ktime_sub(currtime_us, last_vsync_time_ns)));
+	diff_from_vsync /= USEC_PER_MSEC;
+	/*
+	 * If the last Vsync occurred more than 64 ms ago, skip programming
+	 * the timer
+	 */
+	if (diff_from_vsync < (VSYNC_INTERVAL*MAX_VSYNC_GAP)) {
+		vsync_interval =
+			(VSYNC_INTERVAL-diff_from_vsync)%VSYNC_INTERVAL;
+	} else
+		vsync_interval = VSYNC_INTERVAL+1;
+
+	return vsync_interval;
+}
+
+enum hrtimer_restart mdp_pc_hrtimer_callback(struct hrtimer *timer)
+{
+	if (!wake_lock_active(&mdp_idle_wakelock)) {
+		/* Hold Wakelock if no locks held */
+		wake_lock(&mdp_idle_wakelock);
+	}
+	return HRTIMER_NORESTART;
+}
+
+void init_pc_timer(void)
+{
+	/*
+	 * Initialize hr timer which fires a few ms before Vsync - this
+	 * gets rid of any latencies that may arise due to
+	 * wake up from PC
+	 */
+	hrtimer_init(&hr_mdp_timer_pc, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	hr_mdp_timer_pc.function = &mdp_pc_hrtimer_callback;
+}
+
+void program_pc_timer(unsigned long diff_interval)
+{
+	ktime_t ktime_pc;
+	unsigned long delay_in_ns = 0;
+
+	/* Skip programming timer due to invalid delay */
+	if (diff_interval > VSYNC_INTERVAL)
+		return;
+
+	if (diff_interval < WAKE_DELAY) {
+		/*
+		 * Difference from last vsync was a multiple of refresh rate
+		 * (16*x)%16). Reset it to actual time to next vsync
+		 */
+		if (diff_interval == 0)
+			delay_in_ns = VSYNC_INTERVAL-WAKE_DELAY;
+		else
+			return;	/* too close to vsync to fire timer - skip */
+	} else if (diff_interval == WAKE_DELAY) {
+		delay_in_ns = 1;  /* diff_interval/WAKE_DELAY */
+	} else {
+		delay_in_ns = diff_interval-WAKE_DELAY;
+	}
+	delay_in_ns *= NSEC_PER_MSEC;
+	ktime_pc = ktime_set(0, delay_in_ns);
+	hrtimer_start(&hr_mdp_timer_pc, ktime_pc, HRTIMER_MODE_REL);
+}
+
+/*
  * mdp4_overlay_dsi_video_wait4event:
  * INTR_DMA_P_DONE and INTR_PRIMARY_VSYNC event only
  * no INTR_OVERLAY0_DONE event allowed.
@@ -496,12 +593,21 @@ static void mdp4_overlay_dsi_video_wait4event(struct msm_fb_data_type *mfd,
 {
 	unsigned long flag;
 	unsigned int data;
+	unsigned long vsync_interval;
 
 	data = inpdw(MDP_BASE + DSI_VIDEO_BASE);
 	data &= 0x01;
 	if (data == 0)	/* timing generator disabled */
 		return;
-
+	if ((intr_done == INTR_PRIMARY_VSYNC) ||
+			(intr_done == INTR_DMA_P_DONE)) {
+		if (first_time) {
+			init_pc_timer();
+			first_time = 0;
+		}
+		vsync_interval = compute_vsync_interval();
+		program_pc_timer(vsync_interval);
+	}
 	spin_lock_irqsave(&mdp_spin_lock, flag);
 	INIT_COMPLETION(dsi_video_comp);
 	mfd->dma->waiting = TRUE;
@@ -588,6 +694,10 @@ void mdp4_overlay_dsi_video_vsync_push(struct msm_fb_data_type *mfd,
 void mdp4_primary_vsync_dsi_video(void)
 {
 	complete_all(&dsi_video_comp);
+	last_vsync_time_ns = ktime_get();
+	/* Release Wakelock */
+	if (wake_lock_active(&mdp_idle_wakelock))
+		wake_unlock(&mdp_idle_wakelock);
 }
 
  /*
@@ -620,6 +730,10 @@ void mdp4_dma_p_done_dsi_video(struct mdp_dma_data *dma)
 		blt_cfg_changed = 0;
 	}
 	complete_all(&dsi_video_comp);
+	last_vsync_time_ns = ktime_get();
+	/*  Release Wakelock */
+	if (wake_lock_active(&mdp_idle_wakelock))
+		wake_unlock(&mdp_idle_wakelock);
 }
 #endif
 /*

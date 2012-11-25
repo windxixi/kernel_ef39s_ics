@@ -22,18 +22,27 @@
 #define TOUCH_KEY_Y		1332 // 833
 #define TOUCH_MENU_MIN		45 // 27	// 0 + 27
 #define TOUCH_MENU_MAX		198 // 119	// 27 + 92
-#define TOUCH_HOME_MIN		266	//316 // 190	// 480/2 - 50
-#define TOUCH_HOME_MAX		533	//483 // 290	// 480/2 + 50
+#define TOUCH_HOME_MIN		316 // 190	// 480/2 - 50
+#define TOUCH_HOME_MAX		483 // 290	// 480/2 + 50
 #define TOUCH_BACK_MIN		601 // 361	// 453 - 92
 #define TOUCH_BACK_MAX		755 // 453	// 480 - 27
 
+#define EARJACK_TCHTHR	52
+#define EARJACK_TCHHYST	13
+
+/* -------------------------------------------------------------------- */
+/* qt602240 protocol define */
+/* -------------------------------------------------------------------- */
+#define QT602240_REFERENCE_MIN			3680 
+#define QT602240_REFERENCE_MAX			13280
+
+
 #ifdef ITO_TYPE_CHECK
 /*
-	Reserved = 0
+	G1F = 0,	
  	GF3 = 1,
  	GF2 = 2,
-	G1F = 3,
- 	
+ 	Reserved = 3
 */
 static ito_table_element ito_table[] = {
 	{0,	300}, // 0 Ohm, 0V
@@ -45,25 +54,17 @@ static ito_table_element ito_table[] = {
 
 #ifdef PROTECTION_MODE
 /* -------------------------------------------------------------------- */
-#define T8_TCHAUTOCAL_PROTECTION         	5  /* 5*(200ms) */
-#define T8_ATCHCALST_PROTECTION         	0
-#define T8_ATCHCALSTHR_PROTECTION         	35
-#define T8_ATCHFRCCALTHR_PROTECTION        	50        
-#define T8_ATCHFRCCALRATIO_PROTECTION     	20     
-#endif
-
-/* DEVICE   : mxT224 CONFIGURATION */
-#define QT602240_MAX_CHANNEL_NUM			224	//19 * 11 mode
-#define QT602240_MAX_EF40_CHANNEL_NUM			209	//19 * 11 mode
-#define QT602240_PAGE_NUM					4
-#define QT602240_REFERENCE_MIN			3680
-#define QT602240_REFERENCE_MAX			13280
-
-#define QT602240_PAGE_SIZE					128	
-#define QT602240_DELTA_MODE			0x10
-#define QT602240_REFERENCE_MODE		0x11
+/* DEVICE   : mxT224 Lockscreen Mode CONFIGURATION */
 /* -------------------------------------------------------------------- */
+#define T8_TCHAUTOCAL_PROTECTION 	10  /* 10*(200ms) */
+#define T8_ATCHCALST_PROTECTION 	0
+#define T8_ATCHCALSTHR_PROTECTION	0
+#define T8_ATCHFRCCALTHR_PROTECTION 	50        
+#define T8_ATCHFRCCALRATIO_PROTECTION 	20     
 
+#endif
+/* DEVICE   : mxT224 CONFIGURATION */
+/* -------------------------------------------------------------------- */
 
 /* _SPT_USERDATA_T38 INSTANCE 0 */
 #define T7_IDLEACQINT			32
@@ -77,10 +78,10 @@ static ito_table_element ito_table[] = {
 #define T8_DRIFTST               	1	// 4	//10	//20
 #define T8_TCHAUTOCAL            	0
 #define T8_SYNC                  	0
-#define T8_ATCHCALST             	255	//0//255	//0	//255	//0	//9
-#define T8_ATCHCALSTHR           	1	//0	//10	//0	//35	//0	//35	//45	//35	//0
-#define T8_ATCHFRCCALTHR         	255	//50         
-#define T8_ATCHFRCCALRATIO       	127	//25	//20	//25       
+#define T8_ATCHCALST             	0	//9
+#define T8_ATCHCALSTHR           	45
+#define T8_ATCHFRCCALTHR         	0        
+#define T8_ATCHFRCCALRATIO       	0     
 
 /* _TOUCH_MULTITOUCHSCREEN_T9 INSTANCE 0 */
 #define T9_CTRL                         143
@@ -90,13 +91,13 @@ static ito_table_element ito_table[] = {
 #define T9_YSIZE                        11
 #define T9_AKSCFG                       0
 #define T9_BLEN                         16
-static uint8_t T9_TCHTHR[4] = 	{45,35,35,43};	//{45,35,35,45};	//{45,35,44,45};	//{45,35,45,45};	//{45,35,45,46};	//{45,35,40,46};
-#define T9_TCHDI                      	3	//4	////2	////3	// 2
+static uint8_t T9_TCHTHR[4] = {45,35,44,45};	//{45,35,45,45};	//{45,35,45,46};	//{45,35,40,46};
+#define T9_TCHDI                      	3	// 2
 #define T9_ORIENT                       5
 #define T9_MRGTIMEOUT                   10
 #define T9_MOVHYSTI                     10
 #define T9_MOVHYSTN                     2
-#define T9_MOVFILTER                  	0	///1	// 0	//18
+#define T9_MOVFILTER                  	1	// 0	//18
 #define T9_NUMTOUCH                     MAX_NUM_FINGER
 #define T9_MRGHYST                      10
 #define T9_MRGTHR                       50	//25
@@ -112,7 +113,7 @@ static uint8_t T9_TCHTHR[4] = 	{45,35,35,43};	//{45,35,35,45};	//{45,35,44,45};	
 #define T9_YEDGECTRL                    128	// 0
 #define T9_YEDGEDIST                    0
 #define T9_JUMPLIMIT                    20 
-static uint8_t T9_TCHHYST[4] = 		{11,8,8,10};	//{11,8,8,11};	//{11,8,11,11};	//{11,8,11,9};	//{11,8,10,9};
+static uint8_t T9_TCHHYST[4] = 	{11,8,11,11};	//{11,8,11,9};	//{11,8,10,9};
 #define T9_XPITCH                   	0  /* MXT224E added */
 #define T9_YPITCH                   	0  /* MXT224E added */
 #define T9_NEXTTCHDI                	2
@@ -231,7 +232,7 @@ static uint8_t T9_TCHHYST[4] = 		{11,8,8,10};	//{11,8,8,11};	//{11,8,11,11};	//{
 #define T46_CTRL                	4//0     /*Reserved */
 #define T46_MODE                	3 /*3*/     /*0: 16X14Y, 1: 17X13Y, 2: 18X12Y, 3: 19X11Y, 4: 20X10Y, 5: 21X15Y, 6: 22X8Y, */
 #define T46_IDLESYNCSPERX       	16	//24	//32//16/*40*/
-#define T46_ACTVSYNCSPERX       	32	//24	//32	//48//48/*40*/
+#define T46_ACTVSYNCSPERX       	24	//32	//48//48/*40*/
 #define T46_ADCSPERSYNC         	0 
 #define T46_PULSESPERADC        	0     /*0:1  1:2   2:3   3:4 pulses */
 #define T46_XSLEW               	1/*0*/     /*0:500nsec,  1:350nsec */
@@ -250,10 +251,10 @@ static uint8_t T9_TCHHYST[4] = 		{11,8,8,10};	//{11,8,8,11};	//{11,8,11,11};	//{
 #define T47_SYNCSPERX           	0
 
 /* PROCG_NOISESUPPRESSION_T48  */
-#define T48_CTRL                	3	///1  
-#define T48_CFG                 	4	//132	///4  
+#define T48_CTRL                	1  
+#define T48_CFG                 	132	///4  
 #define T48_CALCFG              	96	//80	//96
-#define T48_CALCFG_PLUG             112
+#define T48_CALCFG_PLUG             	112
 #define T48_BASEFREQ            	0  
 #define T48_RESERVED0           	0  
 #define T48_RESERVED1           	0  
@@ -274,7 +275,7 @@ static uint8_t T9_TCHHYST[4] = 		{11,8,8,10};	//{11,8,8,11};	//{11,8,11,11};	//{
 #define T48_GCCOUNTMINTGT       	10 
 #define T48_MFINVLDDIFFTHR      	20//6	//32//0 
 #define T48_MFINCADCSPXTHR      	5  
-#define T48_MFERRORTHR          	38	//35	//46	//38 
+#define T48_MFERRORTHR          	35	//46	//38 
 #define T48_SELFREQMAX          	20	//8//20 
 #define T48_RESERVED9           	0  
 #define T48_RESERVED10          	0  
@@ -283,11 +284,11 @@ static uint8_t T9_TCHHYST[4] = 		{11,8,8,10};	//{11,8,8,11};	//{11,8,11,11};	//{
 #define T48_RESERVED13          	0  
 #define T48_RESERVED14          	0  
 #define T48_BLEN                	0  
-#define T48_TCHTHR              	55	//55	// 45	//30	//50
+#define T48_TCHTHR              	45	//30	//50
 #define T48_TCHDI               	2	// 3
 #define T48_MOVHYSTI            	6
 #define T48_MOVHYSTN            	2  
-#define T48_MOVFILTER           	17	//18	// 30  
+#define T48_MOVFILTER           	18	// 30  
 #define T48_NUMTOUCH            	5  
 #define T48_MRGHYST             	20 
 #define T48_MRGTHR              	25
@@ -300,6 +301,6 @@ static uint8_t T9_TCHHYST[4] = 		{11,8,8,10};	//{11,8,8,11};	//{11,8,11,11};	//{
 #define T48_YEDGECTRL           	135	//0	//149
 #define T48_YEDGEDIST           	65	//0	//68 
 #define T48_JUMPLIMIT           	13
-#define T48_TCHHYST             	13	//13	//11	//12 
+#define T48_TCHHYST             	11	//12 
 #define T48_NEXTTCHDI           	0	/*2*/
 

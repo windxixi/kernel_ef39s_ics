@@ -24,7 +24,14 @@
 #define TOUCH_BACK_MAX		453	// 480 - 27
 
 
+#ifdef LOCKSCREEN_MODE
 /* -------------------------------------------------------------------- */
+#define T8_TCHAUTOCAL_LOCK            	8  /* 5*(200ms) */
+#define T8_ATCHCALST_LOCK             	9
+#define T8_ATCHCALSTHR_LOCK           	45
+#define T8_ATCHFRCCALTHR_LOCK         	50        
+#define T8_ATCHFRCCALRATIO_LOCK       	25     
+#endif
 /* DEVICE   : mxT224 CONFIGURATION */
 /* -------------------------------------------------------------------- */
 
@@ -40,12 +47,10 @@
 #define T8_DRIFTST               	1
 #define T8_TCHAUTOCAL            	0
 #define T8_SYNC                  	0
-#define T8_ATCHCALST             	9
+#define T8_ATCHCALST             	0
 #define T8_ATCHCALSTHR           	45
-#if defined(__VER_2_0__)
-#define T8_ATCHFRCCALTHR         	50
-#define T8_ATCHFRCCALRATIO       	25       
-#endif
+#define T8_ATCHFRCCALTHR         	0        
+#define T8_ATCHFRCCALRATIO       	0     
 
 /* _TOUCH_MULTITOUCHSCREEN_T9 INSTANCE 0 */
 #define T9_CTRL                         143

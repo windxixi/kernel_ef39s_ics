@@ -64,6 +64,18 @@ static struct platform_driver mipi_dsi_driver = {
 
 struct device dsi_dev;
 
+#if defined(CONFIG_FB_MSM_MIPI_DSI_SAMSUNG) || defined(CONFIG_FB_MSM_MIPI_DSI_SONY)  
+static void mipi_lane_ctrl_ULPS(boolean on)
+{
+    if (on) {
+		MIPI_OUTP(MIPI_DSI_BASE + 0x00A8, 0x1f);
+	} else {
+		MIPI_OUTP(MIPI_DSI_BASE + 0x00A8, 0x1f00);
+		msleep(3);
+		MIPI_OUTP(MIPI_DSI_BASE + 0x00A8, 0x00);
+	}
+}
+#endif
 
 static int mipi_dsi_off(struct platform_device *pdev)
 {
@@ -119,6 +131,10 @@ static int mipi_dsi_off(struct platform_device *pdev)
 
 #ifdef CONFIG_MSM_BUS_SCALING
 	mdp_bus_scale_update_request(0);
+#endif
+
+#if defined(CONFIG_FB_MSM_MIPI_DSI_SAMSUNG) || defined(CONFIG_FB_MSM_MIPI_DSI_SONY)  
+	mipi_lane_ctrl_ULPS(1);
 #endif
 
 	local_bh_disable();
@@ -190,7 +206,15 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	hspw = var->hsync_len;
 	vspw = var->vsync_len;
 	width = mfd->panel_info.xres;
+#if defined(CONFIG_F_SKYDISP_FIX_ONE_LINE_YRES)
+	height = mfd->panel_info.yres+1;
+#else
 	height = mfd->panel_info.yres;
+#endif
+
+#if defined(CONFIG_FB_MSM_MIPI_DSI_SAMSUNG) || defined(CONFIG_FB_MSM_MIPI_DSI_SONY)
+	mipi_lane_ctrl_ULPS(0);
+#endif
 
 	mipi_dsi_phy_ctrl(1);
 

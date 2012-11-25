@@ -1099,6 +1099,7 @@ int mipi_dsi_cmd_reg_tx(uint32 data)
  * mipi_dsi_cmds_tx:
  * ov_mutex need to be acquired before call this function.
  */
+int mipi_dsi_cmds_tx_State=0;
 int mipi_dsi_cmds_tx(struct msm_fb_data_type *mfd,
 		struct dsi_buf *tp, struct dsi_cmd_desc *cmds, int cnt)
 {
@@ -1112,51 +1113,78 @@ int mipi_dsi_cmds_tx(struct msm_fb_data_type *mfd,
 	* one pixel line, since it only transmit it
 	* during BLLP.
 	*/
+	mipi_dsi_cmds_tx_State=0;
+	
 	dsi_ctrl = MIPI_INP(MIPI_DSI_BASE + 0x0000);
 	video_mode = dsi_ctrl & 0x02; /* VIDEO_MODE_EN */
+	mipi_dsi_cmds_tx_State=2;
+
 	if (video_mode) {
+		mipi_dsi_cmds_tx_State=20;
 		ctrl = dsi_ctrl | 0x04; /* CMD_MODE_EN */
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, ctrl);
+		mipi_dsi_cmds_tx_State=21;
 	} else { /* cmd mode */
 		/*
 		 * during boot up, cmd mode is configured
 		 * even it is video mode panel.
 		 */
 		/* make sure mdp dma is not txing pixel data */
+		mipi_dsi_cmds_tx_State=30;
+#ifndef CONFIG_FB_MSM_MIPI_DSI_SAMSUNG
 		if (mfd->panel_info.type == MIPI_CMD_PANEL) {
+		mipi_dsi_cmds_tx_State=31;
 #ifndef CONFIG_FB_MSM_MDP303
 			mdp4_dsi_cmd_dma_busy_wait(mfd);
 #else
 			mdp3_dsi_cmd_dma_busy_wait(mfd);
 #endif
+		mipi_dsi_cmds_tx_State=32;
 		}
+#endif //CONFIG_FB_MSM_MIPI_DSI_SAMSUNG
 	}
 
+	mipi_dsi_cmds_tx_State=3;
 	spin_lock_irqsave(&dsi_mdp_lock, flag);
+	mipi_dsi_cmds_tx_State=4;
 	mipi_dsi_enable_irq();
+	mipi_dsi_cmds_tx_State=5;
 	dsi_mdp_busy = TRUE;
 	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
+	mipi_dsi_cmds_tx_State=6;
 
 	cm = cmds;
 	mipi_dsi_buf_init(tp);
+	mipi_dsi_cmds_tx_State=7;
 	for (i = 0; i < cnt; i++) {
+		mipi_dsi_cmds_tx_State=100+i*10;
 		mipi_dsi_buf_init(tp);
+		mipi_dsi_cmds_tx_State++;
 		mipi_dsi_cmd_dma_add(tp, cm);
+		mipi_dsi_cmds_tx_State++;
 		mipi_dsi_cmd_dma_tx(tp);
+		mipi_dsi_cmds_tx_State++;
 		if (cm->wait)
 			msleep(cm->wait);
+		mipi_dsi_cmds_tx_State++;
 		cm++;
 	}
 
+	mipi_dsi_cmds_tx_State=8;
 	spin_lock_irqsave(&dsi_mdp_lock, flag);
+	mipi_dsi_cmds_tx_State=9;
 	dsi_mdp_busy = FALSE;
 	mipi_dsi_disable_irq();
+	mipi_dsi_cmds_tx_State=10;
 	complete(&dsi_mdp_comp);
+	mipi_dsi_cmds_tx_State=11;
 	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
+	mipi_dsi_cmds_tx_State=12;
 
 	if (video_mode)
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, dsi_ctrl); /* restore */
 
+	mipi_dsi_cmds_tx_State=13;
 	return cnt;
 }
 
@@ -1339,7 +1367,7 @@ int mipi_dsi_cmd_dma_tx(struct dsi_buf *tp)
 	MIPI_OUTP(MIPI_DSI_BASE + 0x08c, 0x01);	/* trigger */
 	wmb();
 
-#if 1
+#if defined(CONFIG_FB_MSM_MIPI_DSI_SAMSUNG)
 	if(mipi_samsung_lcd_off_running)
 	{
 		unsigned long time_out;

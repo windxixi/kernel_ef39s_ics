@@ -55,6 +55,7 @@ static int dtv_enabled;
 
 static struct mdp4_overlay_pipe *dtv_pipe;
 static DECLARE_COMPLETION(dtv_comp);
+
 static int mdp4_dtv_start(struct msm_fb_data_type *mfd)
 {
 	int dtv_width;
@@ -270,6 +271,7 @@ int mdp4_dtv_off(struct platform_device *pdev)
 
 	ret = panel_next_off(pdev);
 	mdp_footswitch_ctrl(FALSE);
+
 	dev_info(&pdev->dev, "mdp4_overlay_dtv: off");
 	return ret;
 }

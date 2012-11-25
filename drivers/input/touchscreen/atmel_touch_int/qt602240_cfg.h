@@ -42,10 +42,8 @@
 #define T8_SYNC                  	0
 #define T8_ATCHCALST             	9
 #define T8_ATCHCALSTHR           	35
-#if defined(__VER_2_0__)
 #define T8_ATCHFRCCALTHR         	50         
 #define T8_ATCHFRCCALRATIO       	20      
-#endif
 
 /* _TOUCH_MULTITOUCHSCREEN_T9 INSTANCE 0 */
 #define T9_CTRL                         143

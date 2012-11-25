@@ -82,7 +82,7 @@ static ito_table_element ito_table[] = {
 #define T8_ATCHFRCCALRATIO       	127
 
 /* _TOUCH_MULTITOUCHSCREEN_T9 INSTANCE 0 */
-#define T9_CTRL                         143
+#define T9_CTRL                         131
 #define T9_XORIGIN                      0
 #define T9_YORIGIN                      0
 #define T9_XSIZE                        19
@@ -213,7 +213,7 @@ static uint8_t T9_TCHHYST[4] = {13,9,8,7};
 #define T40_XLOGRIP             	0
 #define T40_XHIGRIP             	0
 #define T40_YLOGRIP             	0
-#define T40_YHIGRIP			0
+#define T40_YHIGRIP					0
 
 /* PROCI_TOUCHSUPPRESSION_T42 */
 #define T42_CTRL                	0

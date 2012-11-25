@@ -227,9 +227,9 @@ static int dtv_probe(struct platform_device *pdev)
 		mfd->fb_imgType = MSMFB_DEFAULT_TYPE;
 	else
 #ifdef CONFIG_F_SKYDISP_HDMI_CAPTION
-	    mfd->fb_imgType = MDP_ARGB_8888;
+		mfd->fb_imgType = MDP_ARGB_8888;
 #else
-	    mfd->fb_imgType = MDP_RGB_565;
+		mfd->fb_imgType = MDP_RGB_565;
 #endif
 
 	fbi = mfd->fbi;

@@ -68,6 +68,10 @@ extern void MHL_En_Control(bool on);
 #include "../../../arch/arm/mach-msm/sky_sys_reset.h"
 #endif
 
+#ifdef CONFIG_FB_MSM_LOGO
+#define INIT_IMAGE_FILE "/initlogo.rle"
+extern int load_565rle_image(char *filename, bool bf_supported);
+#endif
 
 #if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB_CHARGER)
 #define BATTERY_IMAGE_FILE "/logo2.rle"
@@ -90,6 +94,9 @@ extern void gpio_set_132_trickle_leakeage(void);
 #if defined(TARGET_BUILD_USER)
 static int is_blind_reset = 0;
 #endif
+
+/*  Idle wakelock to prevent PC between wake up and Vsync */
+struct wake_lock mdp_idle_wakelock;
 
 static unsigned char *fbram;
 static unsigned char *fbram_phys;
@@ -500,6 +507,10 @@ static int msm_fb_remove(struct platform_device *pdev)
 		del_timer(&mfd->msmfb_no_update_notify_timer);
 	complete(&mfd->msmfb_no_update_notify);
 	complete(&mfd->msmfb_update_notify);
+
+	/* Do this only for the primary panel */
+	if (mfd->fbi->node == 0)
+		wake_lock_destroy(&mdp_idle_wakelock);
 
 	/* remove /dev/fb* */
 	unregister_framebuffer(mfd->fbi);
@@ -1685,6 +1696,9 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 		mfd->op_enable = FALSE;
 		return -EPERM;
 	}
+
+	if (fbi->node == 0)
+		wake_lock_init(&mdp_idle_wakelock, WAKE_LOCK_IDLE, "mdp");
 
 	fbram += fix->smem_len;
 	fbram_phys += fix->smem_len;

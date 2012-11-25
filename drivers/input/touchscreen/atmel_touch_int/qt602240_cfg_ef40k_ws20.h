@@ -2,7 +2,7 @@
 /* -------------------------------------------------------------------- */
 /* GPIO, VREG & resolution */
 /* -------------------------------------------------------------------- */
-#ifdef QT_MULTITOUCH_ENABLE
+#ifdef QT_MULTITOUCH_ENABLE 
 #define MAX_NUM_FINGER	5
 #else
 #define MAX_NUM_FINGER	1
@@ -11,6 +11,8 @@
 // Screen resolution
 #define SCREEN_RESOLUTION_X	800 // 480
 #define SCREEN_RESOLUTION_Y	1280 // 800
+#define GPIO_TOUCH_ENABLE2_Vdd	62	//ssoh	20110916	TP20 Touch
+#define GPIO_TOUCH_ENABLE1_AVdd	33	//ssoh	20110916	TP20 Touch
 
 // Interrupt GPIO Pin
 #define GPIO_TOUCH_CHG		61
@@ -18,22 +20,29 @@
 #define GPIO_TOUCH_ENABLE2_Vdd	62	//ssoh	20110916	TP20 Touch
 #define GPIO_TOUCH_ENABLE1_AVdd	33	//ssoh	20110916	TP20 Touch
 
-
 #define TOUCH_KEY_Y		1332 // 833
 #define TOUCH_MENU_MIN		45 // 27	// 0 + 27
 #define TOUCH_MENU_MAX		198 // 119	// 27 + 92
-#define TOUCH_HOME_MIN		266	//316 // 190	// 480/2 - 50
-#define TOUCH_HOME_MAX		533	//483 // 290	// 480/2 + 50
+#define TOUCH_HOME_MIN		316 // 190	// 480/2 - 50
+#define TOUCH_HOME_MAX		483 // 290	// 480/2 + 50
 #define TOUCH_BACK_MIN		601 // 361	// 453 - 92
 #define TOUCH_BACK_MAX		755 // 453	// 480 - 27
 
+#define EARJACK_TCHTHR	52
+#define EARJACK_TCHHYST	13
+
+/* -------------------------------------------------------------------- */
+/* qt602240 protocol define */
+/* -------------------------------------------------------------------- */
+#define QT602240_REFERENCE_MIN			3680 
+#define QT602240_REFERENCE_MAX			13280
+
 #ifdef ITO_TYPE_CHECK
 /*
-	Reserved = 0
+	G1F = 0,	
  	GF3 = 1,
  	GF2 = 2,
-	G1F = 3,
- 	
+ 	Reserved = 3
 */
 static ito_table_element ito_table[] = {
 	{0,	300}, // 0 Ohm, 0V
@@ -43,27 +52,10 @@ static ito_table_element ito_table[] = {
 };
 #endif
 
-#ifdef PROTECTION_MODE
-/* -------------------------------------------------------------------- */
-#define T8_TCHAUTOCAL_PROTECTION         	5  /* 5*(200ms) */
-#define T8_ATCHCALST_PROTECTION         	0
-#define T8_ATCHCALSTHR_PROTECTION         	35
-#define T8_ATCHFRCCALTHR_PROTECTION        	50        
-#define T8_ATCHFRCCALRATIO_PROTECTION     	20     
-#endif
 
+/* -------------------------------------------------------------------- */
 /* DEVICE   : mxT224 CONFIGURATION */
-#define QT602240_MAX_CHANNEL_NUM			224	//19 * 11 mode
-#define QT602240_MAX_EF40_CHANNEL_NUM			209	//19 * 11 mode
-#define QT602240_PAGE_NUM					4
-#define QT602240_REFERENCE_MIN			3680
-#define QT602240_REFERENCE_MAX			13280
-
-#define QT602240_PAGE_SIZE					128	
-#define QT602240_DELTA_MODE			0x10
-#define QT602240_REFERENCE_MODE		0x11
 /* -------------------------------------------------------------------- */
-
 
 /* _SPT_USERDATA_T38 INSTANCE 0 */
 #define T7_IDLEACQINT			64
@@ -250,7 +242,7 @@ static uint8_t T9_TCHHYST[4] = {18,18,18,18};
 #define T47_SYNCSPERX           	0
 
 /* PROCG_NOISESUPPRESSION_T48  */
-#define T48_CTRL                	3	///1  
+#define T48_CTRL                	1  
 #define T48_CFG                 	4  
 #define T48_CALCFG              	96
 #define T48_CALCFG_PLUG             112

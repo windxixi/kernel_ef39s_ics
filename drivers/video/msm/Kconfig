@@ -150,7 +150,7 @@ config FB_MSM_MIPI_DSI_SONY
 	bool
 	select FB_MSM_MIPI_DSI
 	default n
-	
+
 config FB_MSM_MIPI_DSI_SAMSUNG
 	bool
 	select FB_MSM_MIPI_DSI
@@ -207,6 +207,11 @@ config FB_MSM_LCDC_PRISM_WVGA
 	select FB_MSM_LCDC_PANEL
 	default n
 
+config FB_MSM_MIPI_SONY_VIDEO_WXGA
+	bool
+	select FB_MSM_MIPI_DSI_SONY
+	default n
+
 config FB_MSM_LCDC_SAMSUNG_WSVGA
 	bool
 	select FB_MSM_LCDC_PANEL
@@ -255,11 +260,6 @@ config FB_MSM_LCDC_NT35582_WVGA
 config FB_MSM_LCDC_WXGA
 	bool
 	select FB_MSM_LCDC_PANEL
-	default n
-
-config FB_MSM_MIPI_SONY_VIDEO_WXGA
-	bool
-	select FB_MSM_MIPI_DSI_SONY
 	default n
 
 config FB_MSM_MIPI_SAMSUNG_VIDEO_WXGA
@@ -739,12 +739,6 @@ config PANTECH_MHL_SUSPEND_RESUME
 	  Support for MHL_SII9244
 config QUALCOMM_FIX_TMDS_OUT
 	depends on PANTECH_FB_MSM_MHL_SII9244
-	bool "QUALCOMM_FIX_TMDS_OUT"
-	default n
-	---help---
-	  Support for MHL_SII9244	  	  
-config QUALCOMM_FIX_TMDS_OUT
-	depends on QUALCOMM_FIX_TMDS_OUT
 	bool "QUALCOMM_FIX_TMDS_OUT"
 	default n
 	---help---

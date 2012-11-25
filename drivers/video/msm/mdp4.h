@@ -47,12 +47,6 @@ enum {
 	OVERLAY_PERF_LEVEL4
 };
 
-enum mdp4_overlay_status {
-	MDP4_OVERLAY_TYPE_UNSET,
-	MDP4_OVERLAY_TYPE_SET,
-	MDP4_OVERLAY_TYPE_MAX
-};
-
 typedef int (*cmd_fxn_t)(struct platform_device *pdev);
 
 enum {		/* display */
@@ -534,7 +528,7 @@ void mdp4_lcdc_primary_vsyn(void);
 void mdp4_overlay0_done_lcdc(struct mdp_dma_data *dma);
 void mdp4_overlay0_done_mddi(struct mdp_dma_data *dma);
 void mdp4_dma_s_done_mddi(void);
-void mdp4_dma_p_done_mddi(void);
+void mdp4_dma_p_done_mddi(struct mdp_dma_data *dma);
 void mdp4_dma_p_done_dsi(struct mdp_dma_data *dma);
 #ifdef CONFIG_F_SKYDISP_QBUG_FIX_VIDEO_PLAYBACK_HALT //GCAN 20120712 : For prevent video playback halt, 30155 patch rollback
 void mdp4_dma_p_done_dsi_video(void);
@@ -562,9 +556,31 @@ static inline void mdp4_mddi_dma_busy_wait(struct msm_fb_data_type *mfd)
 {
 	/* empty */
 }
+static inline void mdp4_mddi_blt_dmap_busy_wait(struct msm_fb_data_type *mfd)
+{
+	/* empty */
+}
 static inline void mdp4_mddi_overlay_restore(void)
 {
 	/* empty */
+}
+static inline void mdp4_mddi_overlay_blt_start(struct msm_fb_data_type *mfd)
+{
+	/*empty*/
+}
+static inline void mdp4_mddi_overlay_blt_stop(struct msm_fb_data_type *mfd)
+{
+	/*empty*/
+}
+static inline void mdp4_mddi_overlay_blt_offset(struct msm_fb_data_type *mfd,
+					struct msmfb_overlay_blt *req)
+{
+	/* empty */
+}
+static inline void mdp4_mddi_overlay_blt(struct msm_fb_data_type *mfd,
+					struct msmfb_overlay_blt *req)
+{
+	/* empty*/
 }
 #endif
 
@@ -603,6 +619,13 @@ static inline void mdp3_dsi_cmd_dma_busy_wait(struct msm_fb_data_type *mfd)
 }
 #endif
 #else
+int mdp4_mddi_overlay_blt_offset(struct msm_fb_data_type *mfd,
+					struct msmfb_overlay_blt *req);
+void mdp4_mddi_overlay_blt(struct msm_fb_data_type *mfd,
+					struct msmfb_overlay_blt *req);
+int mdp4_mddi_overlay_blt_start(struct msm_fb_data_type *mfd);
+int mdp4_mddi_overlay_blt_stop(struct msm_fb_data_type *mfd);
+void mdp4_mddi_blt_dmap_busy_wait(struct msm_fb_data_type *mfd);
 static inline int mdp4_dsi_overlay_blt_start(struct msm_fb_data_type *mfd)
 {
 	return -ENODEV;
@@ -645,9 +668,6 @@ void mdp4_lcdc_overlay_blt_start(struct msm_fb_data_type *mfd);
 void mdp4_lcdc_overlay_blt_stop(struct msm_fb_data_type *mfd);
 void mdp4_dtv_overlay_blt_start(struct msm_fb_data_type *mfd);
 void mdp4_dtv_overlay_blt_stop(struct msm_fb_data_type *mfd);
-
-int mdp4_mddi_overlay_blt_offset(int *off);
-void mdp4_mddi_overlay_blt(ulong addr);
 void mdp4_overlay_panel_mode(int mixer_num, uint32 mode);
 void mdp4_overlay_panel_mode_unset(int mixer_num, uint32 mode);
 int mdp4_overlay_mixer_play(int mixer_num);
@@ -726,8 +746,6 @@ void mdp4_overlay_resource_release(void);
 void mdp4_overlay_dsi_video_wait4vsync(struct msm_fb_data_type *mfd);
 void mdp4_primary_vsync_dsi_video(void);
 uint32_t mdp4_ss_table_value(int8_t param, int8_t index);
-void mdp4_overlay_status_write(enum mdp4_overlay_status type, bool val);
-bool mdp4_overlay_status_read(enum mdp4_overlay_status type);
 void mdp4_overlay_ctrl_db_reset(void);
 
 int mdp4_overlay_writeback_on(struct platform_device *pdev);

@@ -661,6 +661,7 @@ static int mipi_samsung_lcd_on(struct platform_device *pdev)
 	return 0;
 }
 
+int mipi_samsung_lcd_off_State=0;
 
 int mipi_samsung_lcd_off_running=0;
 static int mipi_samsung_lcd_off(struct platform_device *pdev)
@@ -670,38 +671,55 @@ static int mipi_samsung_lcd_off(struct platform_device *pdev)
 	MSM_FB_INFO("[SKY_LCD] mipi_samsung_lcd_off enter!\n");
 	MSM_FB_INFO("[LIVED] mipi_samsung_lcd_off disp_on=%d |===> \n",(int)samsung_state.disp_on);
 
+	mipi_samsung_lcd_off_State=0;
 	mfd = platform_get_drvdata(pdev);
+	mipi_samsung_lcd_off_State=1;
 
 	if (!mfd){
+		mipi_samsung_lcd_off_State=100;
 		MSM_FB_INFO("[LIVED] mipi_samsung_lcd_off Error mfd is NULL <===| \n");
+		mipi_samsung_lcd_off_State=101;
 		return -ENODEV;
 	}
 	if (mfd->key != MFD_KEY){
+		mipi_samsung_lcd_off_State=200;
 		MSM_FB_INFO("[LIVED] mipi_samsung_lcd_off Error mfd->key != MFD_KEY <===| \n");
+		mipi_samsung_lcd_off_State=201;
 		return -EINVAL;
 	}
 
     //mutex_lock(&mfd->dma->ov_mutex); 
+	mipi_samsung_lcd_off_State=2;
 	if (samsung_state.disp_on == true) {
+		mipi_samsung_lcd_off_State=3;
 		gpio_set_value(LCD_RESET, GPIO_LOW_VALUE);
+		mipi_samsung_lcd_off_State=4;
 		msleep(1);
+		mipi_samsung_lcd_off_State=5;
 		gpio_set_value(LCD_RESET, GPIO_HIGH_VALUE);
+		mipi_samsung_lcd_off_State=6;
 		msleep(120);
+		mipi_samsung_lcd_off_State=7;
 
+		mipi_samsung_lcd_off_State=8;
 		MSM_FB_INFO("%s mipi_dsi_cmds_tx |===>\n",__func__);
 		mipi_samsung_lcd_off_running=1;
 		mipi_dsi_cmds_tx(mfd, &samsung_tx_buf, samsung_display_off_cmds,
 				ARRAY_SIZE(samsung_display_off_cmds));
 		mipi_samsung_lcd_off_running=0;
+		mipi_samsung_lcd_off_State=9;
 		MSM_FB_INFO("%s mipi_dsi_cmds_tx <===|\n",__func__);
 		samsung_state.disp_on = false;
 		samsung_state.disp_initialized = false;
+		mipi_samsung_lcd_off_State=10;
+		mipi_samsung_lcd_off_State=11;
 	}
     //mutex_unlock(&mfd->dma->ov_mutex);
 
 	//gpio_mipi_panel_power(0, 0);
 	MSM_FB_INFO("[LIVED] mipi_samsung_lcd_off Done <===| \n");
 
+	mipi_samsung_lcd_off_State=20;
 	MSM_FB_INFO("[SKY_LCD] mipi_samsung_lcd_off exit!\n");
 	return 0;
 }

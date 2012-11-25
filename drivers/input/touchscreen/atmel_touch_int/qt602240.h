@@ -25,26 +25,10 @@
 
 #define CHIP_NOINIT
 
-#if defined(CONFIG_SKY_EF39S_BOARD)
-#define QT602240_MAX_CHANNEL_NUM		209
-#define QT602240_REFERENCE_MIN			3680 
-#define QT602240_REFERENCE_MAX			13280
-#define QT602240_DELTA_MODE			0x10
-#define QT602240_REFERENCE_MODE		0x11
+// NOISE _STATE
+#if defined(CONFIG_SKY_EF39S_BOARD) ||defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD)
+#define NOISE_STATE
 #endif
-
-#define	TS_100MS_TIMER_INTERVAL
-
-//EARJACK_TOUCH
-#if defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD)
-#define EARJACK_TOUCH
-#endif
-
-// 5S PROTECTION_MODE
-#if defined(CONFIG_SKY_EF39S_BOARD) || defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD) || defined(CONFIG_SKY_EF65L_BOARD) || defined(CONFIG_PANTECH_PRESTO_BOARD)
-#define PROTECTION_MODE
-#endif
-
 // ITO Type Check from ADC
 #if defined(CONFIG_SKY_EF39S_BOARD) || defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD) ||( defined(CONFIG_SKY_EF65L_BOARD) && (BOARD_REV > WS20)) 
 #define ITO_TYPE_CHECK
@@ -55,9 +39,9 @@
 #define HAS_BUTTONS
 #endif
 
-// NOISE _STATE
-#if defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD)
-#define NOISE_STATE
+// EARJACK_TOUCH
+#if defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD) || defined(CONFIG_SKY_EF65L_BOARD)
+#define EARJACK_TOUCH
 #endif
 
 
@@ -75,6 +59,10 @@ typedef struct {
 #define u8      __u8
 #define S16     signed short int
 #define U16     unsigned short int
+#define QT602240_I2C_ADDR       		0x4A
+#define QT602240_I2C_BOOT_ADDR  		0x24
+#define QT602240_MAX_CHANNEL_NUM		224
+#define QT602240_PAGE_NUM			4
 
 typedef enum 
 {
@@ -640,6 +628,15 @@ typedef struct
 	uint8_t num_declared_objects; /* address 6 */
 } info_id_t;
 
+
+static U16 address_pointer;
+
+uint16_t message_processor_address;
+static uint16_t command_processor_address;
+
+uint16_t get_object_address(uint8_t object_type, uint8_t instance);
+
+
 /******************************************************************************
  *       QT602240 Object table init
  * *****************************************************************************/
@@ -772,6 +769,19 @@ config_table_element t46_cteconfig_config_table[] = {
 	{0},
 };
 
+config_table_element t47_stylus_config_table[] = {
+	{(int16_t*)&stylus_t47_config.ctrl, UINT8},
+	{(int16_t*)&stylus_t47_config.contmin, UINT8},
+	{(int16_t*)&stylus_t47_config.contmax, UINT8},
+	{(int16_t*)&stylus_t47_config.stability, UINT8},
+	{(int16_t*)&stylus_t47_config.maxtcharea, UINT8},
+	{(int16_t*)&stylus_t47_config.amplthr, UINT8},
+	{(int16_t*)&stylus_t47_config.styshape, UINT8},
+	{(int16_t*)&stylus_t47_config.hoversup, UINT8},
+	{(int16_t*)&stylus_t47_config.confthr, UINT8},
+	{(int16_t*)&stylus_t47_config.syncsperx, UINT8},
+};
+
 config_table_element t48_noisesuppression_config_table[] = {
 	{(int16_t*)&noisesuppression_t48_config.ctrl, UINT8},
 	{(int16_t*)&noisesuppression_t48_config.cfg, UINT8},
@@ -836,6 +846,7 @@ config_table_element* config_table[50] = {
 	[40] = (config_table_element*) &t40_gripsuppression_config_table,
 	[42] = (config_table_element*) &t42_touchsuppression_config_table,
 	[46] = (config_table_element*) &t46_cteconfig_config_table,
+	[47] = (config_table_element*) &t47_stylus_config_table,
 	[48] = (config_table_element*) &t48_noisesuppression_config_table,
 };
 
