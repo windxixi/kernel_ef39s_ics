@@ -17,7 +17,7 @@ export CROSS_COMPILE=/home/windxixi/cm9/prebuilt/linux-x86/toolchain/arm-eabi-4.
 ##############################################################################
  
 make  msm8660-perf-EF39S_TP30_defconfig
-make -j2  
+make -j4  
 
 ##############################################################################
 # Copy Kernel Image
