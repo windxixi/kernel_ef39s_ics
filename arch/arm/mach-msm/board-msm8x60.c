@@ -11151,7 +11151,6 @@ static struct msm_bus_vectors mdp_1080p_vectors[] = {
 };
 
 #else
-#ifndef CONFIG_FB_MSM_MIPI_DSI
 static struct msm_bus_vectors mdp_sd_smi_vectors[] = {
 	/* Default case static display/UI/2d/3d if FB SMI */
 	{
@@ -11217,7 +11216,7 @@ static struct msm_bus_vectors mdp_720p_vectors[] = {
 		.ib = 288000000 * 2,
 	},
 };
-#endif
+
 static struct msm_bus_vectors mdp_1080p_vectors[] = {
 	/* 1080p and less video */
 	{
@@ -11241,7 +11240,6 @@ static struct msm_bus_paths mdp_bus_scale_usecases[] = {
 		ARRAY_SIZE(mdp_init_vectors),
 		mdp_init_vectors,
 	},
-#ifndef CONFIG_FB_MSM_MIPI_DSI
 	{
 		ARRAY_SIZE(mdp_sd_smi_vectors),
 		mdp_sd_smi_vectors,
@@ -11258,28 +11256,11 @@ static struct msm_bus_paths mdp_bus_scale_usecases[] = {
 		ARRAY_SIZE(mdp_720p_vectors),
 		mdp_720p_vectors,
 	},
-#else
 	{
 		ARRAY_SIZE(mdp_1080p_vectors),
 		mdp_1080p_vectors,
 	},
-	{
-		ARRAY_SIZE(mdp_1080p_vectors),
-		mdp_1080p_vectors,
-	},
-	{
-		ARRAY_SIZE(mdp_1080p_vectors),
-		mdp_1080p_vectors,
-	},
-	{
-		ARRAY_SIZE(mdp_1080p_vectors),
-		mdp_1080p_vectors,
-	},
-#endif
-	{
-		ARRAY_SIZE(mdp_1080p_vectors),
-		mdp_1080p_vectors,
-	},
+
 };
 static struct msm_bus_scale_pdata mdp_bus_scale_pdata = {
 	mdp_bus_scale_usecases,
@@ -11546,46 +11527,9 @@ static int atv_dac_power(int on)
 #endif
 
 #define MDP_VSYNC_GPIO			28
-#ifdef CONFIG_FB_MSM_MIPI_DSI
-int mdp_core_clk_rate_table[] = {
-// [LS5] 2011.08.18 by lived
-#if defined (CONFIG_FB_MSM_MIPI_DSI_SAMSUNG)
-	128000000,
-	128000000,
-	177780000,
-#elif defined (CONFIG_FB_MSM_MIPI_DSI_SONY)
-	85330000,
-	85330000,
-	200000000,
-#else
-	85330000,
-	128000000,
-	160000000,
-#endif
-	200000000,
-};
-#else
-int mdp_core_clk_rate_table[] = {
-#ifdef CONFIG_MACH_MSM8X60_PRESTO
-	85330000,
-#else
-	59080000,
-#endif
-	128000000,
-	128000000,
-	200000000,
-};
-#endif
-
 static struct msm_panel_common_pdata mdp_pdata = {
-	//.gpio = MDP_VSYNC_GPIO,
-#if defined(CONFIG_FB_MSM_MIPI_DSI)
-	.mdp_core_clk_rate = 128000000,
-#else
-	.mdp_core_clk_rate = 59080000,
-#endif
-	.mdp_core_clk_table = mdp_core_clk_rate_table,
-	.num_mdp_clk = ARRAY_SIZE(mdp_core_clk_rate_table),
+	.gpio = MDP_VSYNC_GPIO,
+	.mdp_max_clk = 200000000,
 #ifdef CONFIG_MSM_BUS_SCALING
 	.mdp_bus_scale_table = &mdp_bus_scale_pdata,
 #endif

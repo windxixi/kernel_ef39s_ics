@@ -644,11 +644,11 @@ static int mipi_samsung_lcd_on(struct platform_device *pdev)
 		MIPI_OUTP(MIPI_DSI_BASE + 0x38, 0x10000000);    // High Speed Mode   
 #endif
 
-		mipi_dsi_cmds_tx(mfd, &samsung_tx_buf, samsung_display_init_cmds,
+		mipi_dsi_cmds_tx(&samsung_tx_buf, samsung_display_init_cmds,
 				ARRAY_SIZE(samsung_display_init_cmds));
 		samsung_state.disp_initialized = true;
 	}
-	mipi_dsi_cmds_tx(mfd, &samsung_tx_buf, samsung_display_on_cmds,
+	mipi_dsi_cmds_tx(&samsung_tx_buf, samsung_display_on_cmds,
 			ARRAY_SIZE(samsung_display_on_cmds));
 #if 0//def LCD_GAMMA_TEST
 	MIPI_OUTP(MIPI_DSI_BASE + 0x38, 0x14000000);    // Low Power Mode
@@ -704,7 +704,7 @@ static int mipi_samsung_lcd_off(struct platform_device *pdev)
 		mipi_samsung_lcd_off_State=8;
 		MSM_FB_INFO("%s mipi_dsi_cmds_tx |===>\n",__func__);
 		mipi_samsung_lcd_off_running=1;
-		mipi_dsi_cmds_tx(mfd, &samsung_tx_buf, samsung_display_off_cmds,
+		mipi_dsi_cmds_tx(&samsung_tx_buf, samsung_display_off_cmds,
 				ARRAY_SIZE(samsung_display_off_cmds));
 		mipi_samsung_lcd_off_running=0;
 		mipi_samsung_lcd_off_State=9;

@@ -124,7 +124,7 @@ static void mdp_hw_cursor_enable_vsync(void)
 		else
 			/* enable irq */
 			mdp_enable_irq(MDP_OVERLAY0_TERM);
-
+	pr_err("%s mdp_cursor.c\n", __func__);
 		sync_disabled = 0;
 
 		/* enable vsync intr */

@@ -1574,7 +1574,7 @@ bool hdmi_common_get_video_format_from_drv_data(struct msm_fb_data_type *mfd)
 				: HDMI_VFRMT_1440x576i50_16_9;
 			break;
 		case 1920:
-#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244  // 20110429, kkcho, MHL»ç¿ëÀ» À§ÇØ HDMI OUTPUT format À» ³·Ãá´Ù... (temp´Ù )	
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244  // 20110429, kkcho, MHL??? ?? HDMI OUTPUT format ? ???... (temp? )	
 			format = HDMI_VFRMT_1920x1080p30_16_9;//HDMI_VFRMT_1280x720p50_16_9;
 #else
 			format = HDMI_VFRMT_1920x1080p60_16_9;
@@ -1664,7 +1664,7 @@ void hdmi_common_init_panel_info(struct msm_panel_info *pinfo)
 	pinfo->wait_cycle = 0;
 	pinfo->bpp = 24;
 	if (hdmi_prim_display)
-	pinfo->fb_num = 2;
+		pinfo->fb_num = 2;
 	else
 #ifdef CONFIG_F_SKYDISP_HDMI_CAPTION
 	pinfo->fb_num = 2; // For double buffering

@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,18 +11,10 @@
  *
  */
 
-
-
 #ifndef MSM_FB_PANEL_H
 #define MSM_FB_PANEL_H
 
 #include "msm_fb_def.h"
-
-#ifdef CONFIG_FB_MSM_MIPI_DSI_SONY
-#if (BOARD_REV > WS20)
-#define F_SKYDISP_DSI_PADDING
-#endif
-#endif
 
 struct msm_fb_data_type;
 
@@ -46,6 +38,7 @@ typedef struct panel_id_s {
 #define MIPI_VIDEO_PANEL	8	/* MIPI */
 #define MIPI_CMD_PANEL		9	/* MIPI */
 #define WRITEBACK_PANEL		10	/* Wifi display */
+#define LVDS_PANEL		11	/* LVDS */
 
 /* panel class */
 typedef enum {
@@ -85,6 +78,10 @@ struct lcdc_panel_info {
 	__u32 border_clr;
 	__u32 underflow_clr;
 	__u32 hsync_skew;
+	/* Pad width */
+	uint32 xres_pad;
+	/* Pad height */
+	uint32 yres_pad;
 };
 
 struct mddi_panel_info {
@@ -132,16 +129,12 @@ struct mipi_panel_info {
 	char mdp_trigger;
 	char dma_trigger;
 	uint32 dsi_pclk_rate;
+	/* byte to esc clk ratio */
+	uint32 esc_byte_ratio;
 	/* The packet-size should not bet changed */
 	char no_max_pkt_size;
 	/* Clock required during LP commands */
 	char force_clk_lane_hs;
-#ifdef F_SKYDISP_DSI_PADDING
-	/* Pad width */
-	uint32 xres_pad;
-	/* Pad height */
-	uint32 yres_pad;
-#endif
 };
 
 struct msm_panel_info {
@@ -168,7 +161,6 @@ struct msm_panel_info {
 	struct mddi_panel_info mddi;
 	struct lcd_panel_info lcd;
 	struct lcdc_panel_info lcdc;
-
 	struct mipi_panel_info mipi;
 };
 

@@ -126,6 +126,7 @@ void mdp_dma3_update(struct msm_fb_data_type *mfd)
 	MDP_OUTP(MDP_BASE + 0xC0008, (uint32) buf >> 3);
 
 	spin_lock_irqsave(&mdp_spin_lock, flag);
+	pr_err("%s mdp_dma_tv.c\n", __func__);
 	mdp_enable_irq(MDP_DMA3_TERM);
 	INIT_COMPLETION(mfd->dma->comp);
 	mfd->dma->waiting = TRUE;

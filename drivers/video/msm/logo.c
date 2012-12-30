@@ -73,7 +73,7 @@ static void memset16(void *_ptr, unsigned short val, unsigned count)
 	while (count--)
 		*ptr++ = val;
 }
-#endif  // CONFIG_F_SKYDISP_FRAMEBUFFER_32
+#endif
 
 /* 565RLE image format: [count(2 bytes), rle(2 bytes)] */
 int load_565rle_image(char *filename, bool bf_supported)
@@ -151,7 +151,7 @@ int load_565rle_image(char *filename, bool bf_supported)
 		count -= 8;
 #else
 		count -= 4;
-#endif
+#endif		
 	}
 
 err_logo_free_data:

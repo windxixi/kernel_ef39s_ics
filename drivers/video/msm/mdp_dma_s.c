@@ -138,11 +138,17 @@ void mdp_dma_s_update(struct msm_fb_data_type *mfd)
 	down(&mfd->dma->mutex);
 	if ((mfd) && (!mfd->dma->busy) && (mfd->panel_power_on)) {
 		down(&mfd->sem);
+		pr_err("%s mdp_dma_s.c\n", __func__);
 		mdp_enable_irq(MDP_DMA_S_TERM);
 		if (mfd->panel_info.type == MDDI_PANEL)
+		{
+			pr_err("%s mdp_dma_s.c\n", __func__);
 			mdp_enable_irq(MDP_DMA_S_TERM);
+		}
 		else
-			mdp_enable_irq(MDP_DMA_E_TERM);
+		{	mdp_enable_irq(MDP_DMA_E_TERM);
+			pr_err("%s mdp_dma_s.c\n", __func__);
+		}
 		mfd->dma->busy = TRUE;
 		INIT_COMPLETION(mfd->dma->comp);
 		mfd->ibuf_flushed = TRUE;
