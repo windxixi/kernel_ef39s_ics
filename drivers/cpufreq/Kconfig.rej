@@ -1,0 +1,17 @@
+--- drivers/cpufreq/Kconfig
++++ drivers/cpufreq/Kconfig
+@@ -194,6 +201,14 @@
+ 	  'smartassV2' - a "smart" governor
+ 	  If in doubt, say N.
+ 
++config CPU_FREQ_GOV_LULZACTIVE
++	tristate "'lulzactive' cpufreq governor"
++	depends on CPU_FREQ
++	help
++	  'lulzactive' - a new interactive governor by Tegrak!
++
++	  If in doubt, say N.
++
+ config CPU_FREQ_GOV_INTERACTIVE
+ 	tristate "'interactive' cpufreq policy governor"
+ 	help

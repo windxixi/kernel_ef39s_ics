@@ -1,0 +1,52 @@
+--- arch/arm/mach-msm/scm.c
++++ arch/arm/mach-msm/scm.c
+@@ -169,7 +169,9 @@
+ 	register u32 r2 asm("r2") = cmd_addr;
+ 	do {
+ 		asm volatile(
++		#ifdef REQUIRES_SEC
+ 			".arch_extension sec\n\t"
++		#endif
+ 			__asmeq("%0", "r0")
+ 			__asmeq("%1", "r0")
+ 			__asmeq("%2", "r1")
+@@ -291,7 +293,9 @@
+ 	register u32 r2 asm("r2") = arg1;
+ 
+ 	asm volatile(
++	#ifdef REQUIRES_SEC
+ 		".arch_extension sec\n\t"
++	#endif
+ 		__asmeq("%0", "r0")
+ 		__asmeq("%1", "r0")
+ 		__asmeq("%2", "r1")
+@@ -323,7 +327,9 @@
+ 	register u32 r3 asm("r3") = arg2;
+ 
+ 	asm volatile(
++	#ifdef REQUIRES_SEC
+ 		".arch_extension sec\n\t"
++	#endif
+ 		__asmeq("%0", "r0")
+ 		__asmeq("%1", "r0")
+ 		__asmeq("%2", "r1")
+@@ -349,7 +355,9 @@
+ 	register u32 r5 asm("r5") = arg4;
+ 
+ 	asm volatile(
++	#ifdef REQUIRES_SEC
+ 		".arch_extension sec\n\t"
++	#endif
+ 		__asmeq("%0", "r0")
+ 		__asmeq("%1", "r1")
+ 		__asmeq("%2", "r2")
+@@ -385,7 +393,9 @@
+ 	r1 = (u32)&context_id;
+ 	do {
+ 		asm volatile(
++	#ifdef REQUIRES_SEC
+ 			".arch_extension sec\n\t"
++	#endif
+ 			__asmeq("%0", "r0")
+ 			__asmeq("%1", "r1")
+ 			__asmeq("%2", "r0")

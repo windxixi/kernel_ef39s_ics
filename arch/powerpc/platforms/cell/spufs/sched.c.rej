@@ -1,0 +1,14 @@
+--- arch/powerpc/platforms/cell/spufs/sched.c	2011-09-24 13:23:32.789284829 +1000
++++ arch/powerpc/platforms/cell/spufs/sched.c	2011-09-24 13:29:06.493284777 +1000
+@@ -64,11 +64,6 @@
+ static struct timer_list spuloadavg_timer;
+ 
+ /*
+- * Priority of a normal, non-rt, non-niced'd process (aka nice level 0).
+- */
+-#define NORMAL_PRIO		120
+-
+-/*
+  * Frequency of the spu scheduler tick.  By default we do one SPU scheduler
+  * tick for every 10 CPU scheduler ticks.
+  */
