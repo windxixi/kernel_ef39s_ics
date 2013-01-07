@@ -17,7 +17,6 @@
 #include <linux/time.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
-#include <linux/hrtimer.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/semaphore.h>
@@ -169,41 +168,8 @@ void mdp4_overlay_update_dsi_cmd(struct msm_fb_data_type *mfd)
 	MDP_OUTP(MDP_BASE + 0x000a0, 0x10);
 	/* disable dsi trigger */
 	MDP_OUTP(MDP_BASE + 0x000a4, 0x00);
-	/* whole screen for base layer */
-	src = (uint8 *) iBuf->buf;
 
-
-	{
-		struct fb_info *fbi;
-
-		fbi = mfd->fbi;
-		if (pipe->is_3d) {
-			bpp = fbi->var.bits_per_pixel / 8;
-			pipe->src_height = pipe->src_height_3d;
-			pipe->src_width = pipe->src_width_3d;
-			pipe->src_h = pipe->src_height_3d;
-			pipe->src_w = pipe->src_width_3d;
-			pipe->dst_h = pipe->src_height_3d;
-			pipe->dst_w = pipe->src_width_3d;
-			pipe->srcp0_ystride = msm_fb_line_length(0,
-						pipe->src_width, bpp);
-		} else {
-			 /* 2D */
-			pipe->src_height = fbi->var.yres;
-			pipe->src_width = fbi->var.xres;
-			pipe->src_h = fbi->var.yres;
-			pipe->src_w = fbi->var.xres;
-			pipe->dst_h = fbi->var.yres;
-			pipe->dst_w = fbi->var.xres;
-			pipe->srcp0_ystride = fbi->fix.line_length;
-		}
-		pipe->src_y = 0;
-		pipe->src_x = 0;
-		pipe->dst_y = 0;
-		pipe->dst_x = 0;
-		pipe->srcp0_addr = (uint32)src;
-	}
-
+	mdp4_overlay_setup_pipe_addr(mfd, pipe);
 
 	mdp4_overlay_rgb_setup(pipe);
 
@@ -215,10 +181,8 @@ void mdp4_overlay_update_dsi_cmd(struct msm_fb_data_type *mfd)
 
 	mdp4_overlay_dmap_cfg(mfd, 0);
 
-	mdp4_mipi_vsync_enable(mfd, pipe, 0);
-
 	/* MDP cmd block disable */
-	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+	mdp_clk_ctrl(0);
 
 	wmb();
 }
@@ -241,15 +205,14 @@ void mdp4_dsi_cmd_3d_sbys(struct msm_fb_data_type *mfd,
 
 	pipe = dsi_pipe;
 
+	pipe->is_3d = r3d->is_3d;
+	pipe->src_height_3d = r3d->height;
+	pipe->src_width_3d = r3d->width;
+
 	if (pipe->is_3d)
 		mdp4_overlay_panel_3d(pipe->mixer_num, MDP4_3D_SIDE_BY_SIDE);
 	else
 		mdp4_overlay_panel_3d(pipe->mixer_num, MDP4_3D_NONE);
-
-	if (mfd->panel_power_on) {
-		mdp4_dsi_cmd_dma_busy_wait(mfd);
-		mdp4_dsi_blt_dmap_busy_wait(mfd);
-	}
 
 	fbi = mfd->fbi;
 	if (pipe->is_3d) {
@@ -297,27 +260,37 @@ void mdp4_dsi_cmd_3d_sbys(struct msm_fb_data_type *mfd,
 int mdp4_dsi_overlay_blt_start(struct msm_fb_data_type *mfd)
 {
 	unsigned long flag;
+	int cndx = 0;
+	struct vsycn_ctrl *vctrl;
+	struct mdp4_overlay_pipe *pipe;
+
+	vctrl = &vsync_ctrl_db[cndx];
+	pipe = vctrl->base_pipe;
 
 	pr_debug("%s: blt_end=%d blt_addr=%x pid=%d\n",
-	__func__, dsi_pipe->blt_end, (int)dsi_pipe->blt_addr, current->pid);
+		 __func__, pipe->blt_end, (int)pipe->blt_addr, current->pid);
 
 	mdp4_allocate_writeback_buf(mfd, MDP4_MIXER0);
 
 	if (mfd->ov0_wb_buf->phys_addr == 0) {
-		pr_info("%s: no blt_base assigned\n", __func__);
+		pr_err("%s: no blt_base assigned\n", __func__);
 		return -EBUSY;
 	}
 
-	if (dsi_pipe->blt_addr == 0) {
-		mdp4_dsi_cmd_dma_busy_wait(mfd);
-		spin_lock_irqsave(&mdp_spin_lock, flag);
-		dsi_pipe->blt_end = 0;
-		dsi_pipe->blt_cnt = 0;
-		dsi_pipe->ov_cnt = 0;
-		dsi_pipe->dmap_cnt = 0;
-		dsi_pipe->blt_addr = mfd->ov0_wb_buf->phys_addr;
+	if (pipe->blt_addr == 0) {
+		spin_lock_irqsave(&vctrl->spin_lock, flag);
+		pipe->blt_end = 0;
+		pipe->blt_cnt = 0;
+		pipe->blt_changed = 1;
+		pipe->ov_cnt = 0;
+		pipe->dmap_cnt = 0;
+		pipe->blt_ov_koff = 0;
+		pipe->blt_dmap_koff = 0;
+		pipe->blt_ov_done = 0;
+		pipe->blt_dmap_done = 0;
+		pipe->blt_addr = mfd->ov0_wb_buf->phys_addr;
 		mdp4_stat.blt_dsi_cmd++;
-		spin_unlock_irqrestore(&mdp_spin_lock, flag);
+		spin_unlock_irqrestore(&vctrl->spin_lock, flag);
 		return 0;
 	}
 
@@ -327,30 +300,24 @@ int mdp4_dsi_overlay_blt_start(struct msm_fb_data_type *mfd)
 int mdp4_dsi_overlay_blt_stop(struct msm_fb_data_type *mfd)
 {
 	unsigned long flag;
+	int cndx = 0;
+	struct vsycn_ctrl *vctrl;
+	struct mdp4_overlay_pipe *pipe;
 
+	vctrl = &vsync_ctrl_db[cndx];
+	pipe = vctrl->base_pipe;
 
-	pr_debug("%s: blt_end=%d blt_addr=%x\n",
-		 __func__, dsi_pipe->blt_end, (int)dsi_pipe->blt_addr);
+	pr_info("%s: blt_end=%d blt_addr=%x pid=%d\n",
+		 __func__, pipe->blt_end, (int)pipe->blt_addr, current->pid);
 
-	if ((dsi_pipe->blt_end == 0) && dsi_pipe->blt_addr) {
-		spin_lock_irqsave(&mdp_spin_lock, flag);
-		dsi_pipe->blt_end = 1;	/* mark as end */
-		spin_unlock_irqrestore(&mdp_spin_lock, flag);
+	if ((pipe->blt_end == 0) && pipe->blt_addr) {
+		spin_lock_irqsave(&vctrl->spin_lock, flag);
+		pipe->blt_end = 1;	/* mark as end */
+		spin_unlock_irqrestore(&vctrl->spin_lock, flag);
 		return 0;
 	}
 
 	return -EBUSY;
-}
-
-int mdp4_dsi_overlay_blt_offset(struct msm_fb_data_type *mfd,
-					struct msmfb_overlay_blt *req)
-{
-	req->offset = 0;
-	req->width = dsi_pipe->src_width;
-	req->height = dsi_pipe->src_height;
-	req->bpp = dsi_pipe->bpp;
-
-	return sizeof(*req);
 }
 
 void mdp4_dsi_overlay_blt(struct msm_fb_data_type *mfd,

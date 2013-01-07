@@ -33,6 +33,8 @@
 
 #define DTV_BASE	0xD0000
 
+static int dtv_enabled;
+
 /*#define DEBUG*/
 #ifdef DEBUG
 static void __mdp_outp(uint32 port, uint32 value)
@@ -95,9 +97,6 @@ static int mdp4_dtv_start(struct msm_fb_data_type *mfd)
 		return -ENODEV;
 
 	if (mfd->key != MFD_KEY)
-		return -EINVAL;
-
-	if (dtv_pipe == NULL)
 		return -EINVAL;
 
 	fbi = mfd->fbi;
@@ -229,6 +228,10 @@ int mdp4_dtv_on(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;
 	int ret = 0;
+	int cndx = 0;
+	struct vsycn_ctrl *vctrl;
+
+	vctrl = &vsync_ctrl_db[cndx];
 
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
 
@@ -238,16 +241,30 @@ int mdp4_dtv_on(struct platform_device *pdev)
 	if (mfd->key != MFD_KEY)
 		return -EINVAL;
 
+	vctrl->dev = mfd->fbi->dev;
+
 	mdp_footswitch_ctrl(TRUE);
+	/* Mdp clock enable */
+	mdp_clk_ctrl(1);
+
 	mdp4_overlay_panel_mode(MDP4_MIXER1, MDP4_PANEL_DTV);
-	if (dtv_pipe != NULL)
-		ret = mdp4_dtv_start(mfd);
+
+	/* Allocate dtv_pipe at dtv_on*/
+	if (vctrl->base_pipe == NULL) {
+		if (mdp4_overlay_dtv_set(mfd, NULL)) {
+			pr_warn("%s: dtv_pipe is NULL, dtv_set failed\n",
+				__func__);
+			return -EINVAL;
+		}
+	}
 
 	ret = panel_next_on(pdev);
 	if (ret != 0)
-		dev_warn(&pdev->dev, "mdp4_overlay_dtv: panel_next_on failed");
+		pr_warn("%s: panel_next_on failed", __func__);
 
-	dev_info(&pdev->dev, "mdp4_overlay_dtv: on");
+	atomic_set(&vctrl->suspend, 0);
+
+	pr_info("%s:\n", __func__);
 
 	return ret;
 }
@@ -298,7 +315,6 @@ static void mdp4_overlay_dtv_alloc_pipe(struct msm_fb_data_type *mfd,
 	pipe->mixer_num = MDP4_MIXER1;
 
 	if (ptype == OVERLAY_TYPE_BF) {
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 		/* LSP_BORDER_COLOR */
 		MDP_OUTP(MDP_BASE + MDP4_OVERLAYPROC1_BASE + 0x5004,
 			((0x0 & 0xFFF) << 16) |	/* 12-bit B */
@@ -306,7 +322,7 @@ static void mdp4_overlay_dtv_alloc_pipe(struct msm_fb_data_type *mfd,
 		/* MSP_BORDER_COLOR */
 		MDP_OUTP(MDP_BASE + MDP4_OVERLAYPROC1_BASE + 0x5008,
 			(0x0 & 0xFFF));		/* 12-bit R */
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+		pipe->src_format = MDP_ARGB_8888;
 	} else {
 		switch (mfd->ibuf.bpp) {
 		case 2:
@@ -558,16 +574,17 @@ void mdp4_dtv_set_black_screen(void)
 	/*Black color*/
 	uint32 color = 0x00000000;
 	uint32 temp_src_format;
+	int cndx = 0;
+	struct vsycn_ctrl *vctrl;
 
-	if (!dtv_pipe || !hdmi_prim_display) {
-		pr_err("dtv_pipe/hdmi as primary are not"
-			   " configured yet\n");
+	vctrl = &vsync_ctrl_db[cndx];
+	if (vctrl->base_pipe == NULL || !hdmi_prim_display) {
+		pr_err("dtv_pipe is not configured yet\n");
 		return;
 	}
 	rgb_base = MDP_BASE + MDP4_RGB_BASE;
-	rgb_base += (MDP4_RGB_OFF * dtv_pipe->pipe_num);
+	rgb_base += (MDP4_RGB_OFF * vctrl->base_pipe->pipe_num);
 
-	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	/*
 	* RGB Constant Color
 	*/

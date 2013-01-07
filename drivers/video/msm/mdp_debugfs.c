@@ -337,7 +337,7 @@ static ssize_t mdp_stat_read(
 	bp += len;
 	dlen -= len;
 	len = snprintf(bp, dlen, "read_ptr: %08lu\n\n",
-					mdp4_stat.intr_rd_ptr);
+					mdp4_stat.intr_rdptr);
 	bp += len;
 	dlen -= len;
 	len = snprintf(bp, dlen, "dsi:\n");
@@ -412,8 +412,12 @@ static ssize_t mdp_stat_read(
 					mdp4_stat.overlay_unset[0]);
 	bp += len;
 	dlen -= len;
-	len = snprintf(bp, dlen, "play:  %08lu\n",
+	len = snprintf(bp, dlen, "play:  %08lu\t",
 					mdp4_stat.overlay_play[0]);
+	bp += len;
+	dlen -= len;
+	len = snprintf(bp, dlen, "commit:  %08lu\n",
+					mdp4_stat.overlay_commit[0]);
 	bp += len;
 	dlen -= len;
 

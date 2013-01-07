@@ -1165,7 +1165,7 @@ static int mipi_renesas_lcd_off(struct platform_device *pdev)
 	if (mfd->key != MFD_KEY)
 		return -EINVAL;
 
-	mipi_dsi_cmds_tx(mfd, &renesas_tx_buf, renesas_display_off_cmds,
+	mipi_dsi_cmds_tx(&renesas_tx_buf, renesas_display_off_cmds,
 			ARRAY_SIZE(renesas_display_off_cmds));
 
 	return 0;

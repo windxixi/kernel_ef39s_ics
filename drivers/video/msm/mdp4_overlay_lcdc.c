@@ -85,8 +85,11 @@ int mdp_lcdc_on(struct platform_device *pdev)
 	struct fb_var_screeninfo *var;
 	struct msm_fb_data_type *mfd;
 	struct mdp4_overlay_pipe *pipe;
-	int ret;
+	int ret = 0;
+	int cndx = 0;
+	struct vsycn_ctrl *vctrl;
 
+	vctrl = &vsync_ctrl_db[cndx];
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
 
 	if (!mfd)
@@ -97,21 +100,19 @@ int mdp_lcdc_on(struct platform_device *pdev)
 
 	mdp4_overlay_ctrl_db_reset();
 
+	vctrl->dev = mfd->fbi->dev;
+
+	/* mdp clock on */
+	mdp_clk_ctrl(1);
+
 	fbi = mfd->fbi;
 	var = &fbi->var;
-
-	/* MDP cmd block enable */
-	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-	if (is_mdp4_hw_reset()) {
-		mdp4_hw_init();
-		outpdw(MDP_BASE + 0x0038, mdp4_display_intf);
-	}
 
 	bpp = fbi->var.bits_per_pixel / 8;
 	buf = (uint8 *) fbi->fix.smem_start;
 	buf_offset = calc_fb_offset(mfd, fbi, bpp);
 
-	if (lcdc_pipe == NULL) {
+	if (vctrl->base_pipe == NULL) {
 		ptype = mdp4_overlay_format2type(mfd->fb_imgType);
 		if (ptype < 0)
 			printk(KERN_INFO "%s: format2type failed\n", __func__);
@@ -126,14 +127,14 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		ret = mdp4_overlay_format2pipe(pipe);
 		if (ret < 0)
 			printk(KERN_INFO "%s: format2pipe failed\n", __func__);
-		lcdc_pipe = pipe; /* keep it */
-		init_completion(&lcdc_comp);
 
 		mdp4_init_writeback_buf(mfd, MDP4_MIXER0);
 		pipe->blt_addr = 0;
 
+
+		vctrl->base_pipe = pipe; /* keep it */
 	} else {
-		pipe = lcdc_pipe;
+		pipe = vctrl->base_pipe;
 	}
 
 	pipe->src_height = fbi->var.yres;
@@ -228,6 +229,7 @@ int mdp_lcdc_on(struct platform_device *pdev)
 	ctrl_polarity =
 	    (data_en_polarity << 2) | (vsync_polarity << 1) | (hsync_polarity);
 
+	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	MDP_OUTP(MDP_BASE + LCDC_BASE + 0x4, hsync_ctrl);
 	MDP_OUTP(MDP_BASE + LCDC_BASE + 0x8, vsync_period);
 	MDP_OUTP(MDP_BASE + LCDC_BASE + 0xc, vsync_pulse_width * hsync_period);
@@ -311,7 +313,7 @@ static void mdp4_lcdc_blt_ov_update(struct mdp4_overlay_pipe *pipe)
 	bpp = 3; /* overlay ouput is RGB888 */
 #endif
 	off = 0;
-	if (pipe->ov_cnt & 0x01)
+	if (pipe->blt_ov_done & 0x01)
 		off = pipe->src_height * pipe->src_width * bpp;
 	addr = pipe->blt_addr + off;
 
@@ -336,7 +338,7 @@ static void mdp4_lcdc_blt_dmap_update(struct mdp4_overlay_pipe *pipe)
 	bpp = 3; /* overlay ouput is RGB888 */
 #endif
 	off = 0;
-	if (pipe->dmap_cnt & 0x01)
+	if (pipe->blt_dmap_done & 0x01)
 		off = pipe->src_height * pipe->src_width * bpp;
 	addr = pipe->blt_addr + off;
 

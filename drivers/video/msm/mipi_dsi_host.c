@@ -144,6 +144,30 @@ void mipi_dsi_disable_irq(void)
 	spin_unlock(&dsi_irq_lock);
 }
 
+void mipi_dsi_clk_cfg(int on)
+{
+	unsigned long flags;
+	static int dsi_clk_cnt;
+
+	spin_lock_irqsave(&mdp_spin_lock, flags);
+	if (on) {
+		if (dsi_clk_cnt == 0) {
+			mipi_dsi_ahb_ctrl(1);
+			mipi_dsi_clk_enable();
+		}
+		dsi_clk_cnt++;
+	} else {
+		if (dsi_clk_cnt) {
+			dsi_clk_cnt--;
+			if (dsi_clk_cnt == 0) {
+				mipi_dsi_clk_disable();
+				mipi_dsi_ahb_ctrl(0);
+			}
+		}
+	}
+	spin_unlock_irqrestore(&mdp_spin_lock, flags);
+}
+
 void mipi_dsi_turn_on_clks(void)
 {
 	local_bh_disable();
@@ -984,13 +1008,34 @@ void mipi_dsi_op_mode_config(int mode)
 	wmb();
 }
 
+int mipi_dsi_ctrl_lock(int mdp)
+{
+	unsigned long flag;
+	int lock = 0;
+
+	spin_lock_irqsave(&dsi_mdp_lock, flag);
+	if (dsi_ctrl_lock == FALSE) {
+		dsi_ctrl_lock = TRUE;
+		lock = 1;
+		if (lock && mdp)	/* mdp pixel */
+			mipi_dsi_enable_irq();
+	}
+	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
+	return lock;
+}
+
+int mipi_dsi_ctrl_lock_query()
+{
+	return dsi_ctrl_lock;
+}
+
 void mipi_dsi_mdp_busy_wait(struct msm_fb_data_type *mfd)
 {
 	unsigned long flag;
 	int need_wait = 0;
 
 	pr_debug("%s: start pid=%d\n",
-				__func__, current->pid);
+			__func__, current->pid);
 	spin_lock_irqsave(&dsi_mdp_lock, flag);
 	if (dsi_mdp_busy == TRUE) {
 		INIT_COMPLETION(dsi_mdp_comp);
@@ -1005,17 +1050,12 @@ void mipi_dsi_mdp_busy_wait(struct msm_fb_data_type *mfd)
 		wait_for_completion(&dsi_mdp_comp);
 	}
 	pr_debug("%s: done pid=%d\n",
-				__func__, current->pid);
+			__func__, current->pid);
 }
-
 
 void mipi_dsi_cmd_mdp_start(void)
 {
 	unsigned long flag;
-
-
-	if (!in_interrupt())
-		mipi_dsi_pre_kickoff_action();
 
 	mipi_dsi_mdp_stat_inc(STAT_DSI_START);
 
@@ -1024,7 +1064,6 @@ void mipi_dsi_cmd_mdp_start(void)
 	dsi_mdp_busy = TRUE;
 	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
 }
-
 
 void mipi_dsi_cmd_bta_sw_trigger(void)
 {
@@ -1057,13 +1096,13 @@ static struct dsi_cmd_desc dsi_tear_off_cmd = {
 void mipi_dsi_set_tear_on(struct msm_fb_data_type *mfd)
 {
 	mipi_dsi_buf_init(&dsi_tx_buf);
-	mipi_dsi_cmds_tx(mfd, &dsi_tx_buf, &dsi_tear_on_cmd, 1);
+	mipi_dsi_cmds_tx(&dsi_tx_buf, &dsi_tear_on_cmd, 1);
 }
 
 void mipi_dsi_set_tear_off(struct msm_fb_data_type *mfd)
 {
 	mipi_dsi_buf_init(&dsi_tx_buf);
-	mipi_dsi_cmds_tx(mfd, &dsi_tx_buf, &dsi_tear_off_cmd, 1);
+	mipi_dsi_cmds_tx(&dsi_tx_buf, &dsi_tear_off_cmd, 1);
 }
 
 int mipi_dsi_cmd_reg_tx(uint32 data)
@@ -1213,8 +1252,8 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 			struct dsi_cmd_desc *cmds, int rlen)
 {
 	int cnt, len, diff, pkt_size;
-	unsigned long flag;
 	char cmd;
+	unsigned long flag;
 
 	if (mfd->panel_info.mipi.no_max_pkt_size) {
 		/* Only support rlen = 4*n */
@@ -1246,15 +1285,12 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 
 	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
 		/* make sure mdp dma is not txing pixel data */
-#ifndef CONFIG_FB_MSM_MDP303
-			mdp4_dsi_cmd_dma_busy_wait(mfd);
-#else
+#ifdef CONFIG_FB_MSM_MDP303
 			mdp3_dsi_cmd_dma_busy_wait(mfd);
 #endif
 	}
 
 	spin_lock_irqsave(&dsi_mdp_lock, flag);
-	mipi_dsi_enable_irq();
 	dsi_mdp_busy = TRUE;
 	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
 
@@ -1262,16 +1298,20 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 		/* packet size need to be set at every read */
 		pkt_size = len;
 		max_pktsize[0] = pkt_size;
+		mipi_dsi_enable_irq();
 		mipi_dsi_buf_init(tp);
 		mipi_dsi_cmd_dma_add(tp, pkt_size_cmd);
 		mipi_dsi_cmd_dma_tx(tp);
 	}
 
+	mipi_dsi_enable_irq();
 	mipi_dsi_buf_init(tp);
 	mipi_dsi_cmd_dma_add(tp, cmds);
 
 	/* transmit read comamnd to client */
 	mipi_dsi_cmd_dma_tx(tp);
+
+	mipi_dsi_disable_irq();
 	/*
 	 * once cmd_dma_done interrupt received,
 	 * return data from client is ready and stored
@@ -1290,7 +1330,6 @@ int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
 
 	spin_lock_irqsave(&dsi_mdp_lock, flag);
 	dsi_mdp_busy = FALSE;
-	mipi_dsi_disable_irq();
 	complete(&dsi_mdp_comp);
 	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
 
@@ -1336,7 +1375,6 @@ extern int mipi_samsung_lcd_off_running;
 
 int mipi_dsi_cmd_dma_tx(struct dsi_buf *tp)
 {
-	int len;
 
 #ifdef DSI_HOST_DEBUG
 	int i;
@@ -1504,7 +1542,6 @@ irqreturn_t mipi_dsi_isr(int irq, void *ptr)
 #ifdef CONFIG_FB_MSM_MDP40
 	mdp4_stat.intr_dsi++;
 #endif
-
 	if (isr & DSI_INTR_ERROR) {
 		mipi_dsi_mdp_stat_inc(STAT_DSI_ERROR);
 		mipi_dsi_error();
@@ -1519,16 +1556,20 @@ irqreturn_t mipi_dsi_isr(int irq, void *ptr)
 	if (isr & DSI_INTR_CMD_DMA_DONE) {
 		mipi_dsi_mdp_stat_inc(STAT_DSI_CMD);
 		complete(&dsi_dma_comp);
+		spin_lock(&dsi_mdp_lock);
+		dsi_ctrl_lock = FALSE;
+		mipi_dsi_disable_irq_nosync();
+		spin_unlock(&dsi_mdp_lock);
 	}
 
 	if (isr & DSI_INTR_CMD_MDP_DONE) {
 		mipi_dsi_mdp_stat_inc(STAT_DSI_MDP);
 		spin_lock(&dsi_mdp_lock);
-		dsi_mdp_busy = FALSE;
+		dsi_ctrl_lock = FALSE;
 		mipi_dsi_disable_irq_nosync();
-		spin_unlock(&dsi_mdp_lock);
+		dsi_mdp_busy = FALSE;
 		complete(&dsi_mdp_comp);
-		mipi_dsi_post_kickoff_action();
+		spin_unlock(&dsi_mdp_lock);
 	}
 
 
