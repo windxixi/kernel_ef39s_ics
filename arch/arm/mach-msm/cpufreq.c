@@ -67,7 +67,7 @@ static int set_cpu_freq(struct cpufreq_policy *policy, unsigned int new_freq)
 		freqs.new = new_freq;
 	freqs.cpu = policy->cpu;
 	cpufreq_notify_transition(&freqs, CPUFREQ_PRECHANGE);
-	ret = acpuclk_set_rate(policy->cpu, new_freq, SETRATE_CPUFREQ);
+	ret = acpuclk_set_rate(policy->cpu, freqs.new, SETRATE_CPUFREQ);
 	if (!ret)
 		cpufreq_notify_transition(&freqs, CPUFREQ_POSTCHANGE);
 
@@ -96,13 +96,13 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 	struct cpufreq_work_struct *cpu_work = NULL;
 	cpumask_var_t mask;
 
+	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
+		return -ENOMEM;
+
 	if (!cpu_active(policy->cpu)) {
 		pr_info("cpufreq: cpu %d is not active.\n", policy->cpu);
 		return -ENODEV;
 	}
-
-	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
-		return -ENOMEM;
 #endif
 
 	mutex_lock(&per_cpu(cpufreq_suspend, policy->cpu).suspend_mutex);
@@ -146,15 +146,13 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 		wait_for_completion(&cpu_work->complete);
 	}
 
+	free_cpumask_var(mask);
 	ret = cpu_work->status;
 #else
 	ret = set_cpu_freq(policy, table[index].frequency);
 #endif
 
 done:
-#ifdef CONFIG_SMP
-	free_cpumask_var(mask);
-#endif
 	mutex_unlock(&per_cpu(cpufreq_suspend, policy->cpu).suspend_mutex);
 	return ret;
 }
@@ -324,4 +322,3 @@ static int __init msm_cpufreq_register(void)
 }
 
 late_initcall(msm_cpufreq_register);
-
