@@ -85,6 +85,11 @@
 /* PTE EFUSE register. */
 #define QFPROM_PTE_EFUSE_ADDR		(MSM_QFPROM_BASE + 0x00C0)
 
+//pz1946 20111114 cpu_clock_low_level
+#if defined(CONFIG_SKY_SMB_CHARGER)
+extern int sky_charging_status(void);
+#endif
+
 static const void * const clk_ctl_addr[] = {SPSS0_CLK_CTL_ADDR,
 			SPSS1_CLK_CTL_ADDR};
 static const void * const clk_sel_addr[] = {SPSS0_CLK_SEL_ADDR,
