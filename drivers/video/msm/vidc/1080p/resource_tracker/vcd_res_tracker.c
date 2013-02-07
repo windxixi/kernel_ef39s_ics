@@ -157,7 +157,7 @@ ion_bail_out:
 
 static void res_trk_pmem_free(struct ddl_buf_addr *addr)
 {
-	/* TODO Pmem*/
+	/*TODO: Enhance for pmem*/
 	struct ddl_context *ddl_context;
 	ddl_context = ddl_get_context();
 	if (ddl_context->video_ion_client) {
@@ -203,7 +203,8 @@ static int res_trk_pmem_alloc
 				rc = -ENOMEM;
 				goto bail_out;
 			}
-		} else {
+		}
+		else {
 			addr->alloc_handle = NULL;
 			addr->alloced_phys_addr = PIL_FW_BASE_ADDR;
 			addr->buffer_size = sz;
@@ -215,7 +216,6 @@ static int res_trk_pmem_alloc
 		if (!addr->alloced_phys_addr) {
 			DDL_MSG_ERROR("%s() : acm alloc failed (%d)\n",
 					__func__, alloc_size);
-			rc = -ENOMEM;
 			goto bail_out;
 		}
 		addr->buffer_size = sz;
@@ -235,12 +235,10 @@ static void res_trk_pmem_unmap(struct ddl_buf_addr *addr)
 		if (addr->physical_base_addr) {
 			ion_unmap_kernel(resource_context.res_ion_client,
 					addr->alloc_handle);
-			if (!res_trk_check_for_sec_session()) {
-				ion_unmap_iommu(resource_context.res_ion_client,
+			ion_unmap_iommu(resource_context.res_ion_client,
 				addr->alloc_handle,
 				VIDEO_DOMAIN,
 				VIDEO_FIRMWARE_POOL);
-			}
 			addr->virtual_base_addr = NULL;
 			addr->physical_base_addr = NULL;
 		}
@@ -370,7 +368,7 @@ static u32 res_trk_sel_clk_rate(unsigned long hclk_rate)
 	return status;
 }
 
-u32 res_trk_get_clk_rate(unsigned long *phclk_rate)
+static u32 res_trk_get_clk_rate(unsigned long *phclk_rate)
 {
 	u32 status = true;
 	mutex_lock(&resource_context.lock);
@@ -956,4 +954,18 @@ u32 get_res_trk_perf_level(enum vcd_perf_level perf_level)
 		res_trk_perf_level = -EINVAL;
 	}
 	return res_trk_perf_level;
+}
+
+u32 res_trk_estimate_perf_level(u32 pn_perf_lvl)
+{
+	VCDRES_MSG_MED("%s(), req_perf_lvl = %d", __func__, pn_perf_lvl);
+	if ((pn_perf_lvl >= RESTRK_1080P_VGA_PERF_LEVEL) &&
+		(pn_perf_lvl < RESTRK_1080P_720P_PERF_LEVEL)) {
+		return RESTRK_1080P_720P_PERF_LEVEL;
+	} else if ((pn_perf_lvl >= RESTRK_1080P_720P_PERF_LEVEL) &&
+			(pn_perf_lvl < RESTRK_1080P_MAX_PERF_LEVEL)) {
+		return RESTRK_1080P_MAX_PERF_LEVEL;
+	} else {
+		return pn_perf_lvl;
+	}
 }

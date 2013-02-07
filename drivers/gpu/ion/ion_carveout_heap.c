@@ -30,6 +30,7 @@
 
 #include <mach/iommu_domains.h>
 #include <asm/mach/map.h>
+#include <asm/cacheflush.h>
 
 struct ion_carveout_heap {
 	struct ion_heap heap;
@@ -41,6 +42,7 @@ struct ion_carveout_heap {
 	int (*release_region)(void *);
 	atomic_t map_count;
 	void *bus_id;
+	unsigned int has_outer_cache;
 };
 
 ion_phys_addr_t ion_carveout_allocate(struct ion_heap *heap,
@@ -54,7 +56,7 @@ ion_phys_addr_t ion_carveout_allocate(struct ion_heap *heap,
 
 	if (!offset) {
 		if ((carveout_heap->total_size -
-		      carveout_heap->allocated_bytes) > size)
+		      carveout_heap->allocated_bytes) >= size)
 			pr_debug("%s: heap %s has enough memory (%lx) but"
 				" the allocation of size %lx still failed."
 				" Memory is probably fragmented.",
@@ -229,29 +231,36 @@ int ion_carveout_cache_ops(struct ion_heap *heap, struct ion_buffer *buffer,
 			void *vaddr, unsigned int offset, unsigned int length,
 			unsigned int cmd)
 {
-	unsigned long vstart, pstart;
-
-	pstart = buffer->priv_phys + offset;
-	vstart = (unsigned long)vaddr;
+	void (*outer_cache_op)(phys_addr_t, phys_addr_t);
+	struct ion_carveout_heap *carveout_heap =
+	     container_of(heap, struct  ion_carveout_heap, heap);
 
 	switch (cmd) {
 	case ION_IOC_CLEAN_CACHES:
-		clean_caches(vstart, length, pstart);
+		dmac_clean_range(vaddr, vaddr + length);
+		outer_cache_op = outer_clean_range;
 		break;
 	case ION_IOC_INV_CACHES:
-		invalidate_caches(vstart, length, pstart);
+		dmac_inv_range(vaddr, vaddr + length);
+		outer_cache_op = outer_inv_range;
 		break;
 	case ION_IOC_CLEAN_INV_CACHES:
-		clean_and_invalidate_caches(vstart, length, pstart);
+		dmac_flush_range(vaddr, vaddr + length);
+		outer_cache_op = outer_flush_range;
 		break;
 	default:
 		return -EINVAL;
 	}
 
+	if (carveout_heap->has_outer_cache) {
+		unsigned long pstart = buffer->priv_phys + offset;
+		outer_cache_op(pstart, pstart + length);
+	}
 	return 0;
 }
 
-static int ion_carveout_print_debug(struct ion_heap *heap, struct seq_file *s)
+static int ion_carveout_print_debug(struct ion_heap *heap, struct seq_file *s,
+				    const struct rb_root *mem_map)
 {
 	struct ion_carveout_heap *carveout_heap =
 		container_of(heap, struct ion_carveout_heap, heap);
@@ -260,6 +269,44 @@ static int ion_carveout_print_debug(struct ion_heap *heap, struct seq_file *s)
 		carveout_heap->allocated_bytes);
 	seq_printf(s, "total heap size: %lx\n", carveout_heap->total_size);
 
+	if (mem_map) {
+		unsigned long base = carveout_heap->base;
+		unsigned long size = carveout_heap->total_size;
+		unsigned long end = base+size;
+		unsigned long last_end = base;
+		struct rb_node *n;
+
+		seq_printf(s, "\nMemory Map\n");
+		seq_printf(s, "%16.s %14.s %14.s %14.s\n",
+			   "client", "start address", "end address",
+			   "size (hex)");
+
+		for (n = rb_first(mem_map); n; n = rb_next(n)) {
+			struct mem_map_data *data =
+					rb_entry(n, struct mem_map_data, node);
+			const char *client_name = "(null)";
+
+			if (last_end < data->addr) {
+				seq_printf(s, "%16.s %14lx %14lx %14lu (%lx)\n",
+					   "FREE", last_end, data->addr-1,
+					   data->addr-last_end,
+					   data->addr-last_end);
+			}
+
+			if (data->client_name)
+				client_name = data->client_name;
+
+			seq_printf(s, "%16.s %14lx %14lx %14lu (%lx)\n",
+				   client_name, data->addr,
+				   data->addr_end,
+				   data->size, data->size);
+			last_end = data->addr_end+1;
+		}
+		if (last_end < end) {
+			seq_printf(s, "%16.s %14lx %14lx %14lu (%lx)\n", "FREE",
+				last_end, end-1, end-last_end, end-last_end);
+		}
+	}
 	return 0;
 }
 
@@ -409,6 +456,7 @@ struct ion_heap *ion_carveout_heap_create(struct ion_platform_heap *heap_data)
 	carveout_heap->heap.type = ION_HEAP_TYPE_CARVEOUT;
 	carveout_heap->allocated_bytes = 0;
 	carveout_heap->total_size = heap_data->size;
+	carveout_heap->has_outer_cache = heap_data->has_outer_cache;
 
 	if (heap_data->extra_data) {
 		struct ion_co_heap_pdata *extra_data =
