@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,8 +10,6 @@
  * GNU General Public License for more details.
  *
  */
-
-
 
 #ifndef MSM_FB_PANEL_H
 #define MSM_FB_PANEL_H
@@ -133,16 +131,18 @@ struct mipi_panel_info {
 	char mdp_trigger;
 	char dma_trigger;
 	uint32 dsi_pclk_rate;
+	/* byte to esc clk ratio */
+	uint32 esc_byte_ratio;
 	/* The packet-size should not bet changed */
 	char no_max_pkt_size;
 	/* Clock required during LP commands */
 	char force_clk_lane_hs;
-#ifdef F_SKYDISP_DSI_PADDING
+
 	/* Pad width */
 	uint32 xres_pad;
 	/* Pad height */
 	uint32 yres_pad;
-#endif
+
 };
 
 struct msm_panel_info {
@@ -169,7 +169,6 @@ struct msm_panel_info {
 	struct mddi_panel_info mddi;
 	struct lcd_panel_info lcd;
 	struct lcdc_panel_info lcdc;
-
 	struct mipi_panel_info mipi;
 };
 

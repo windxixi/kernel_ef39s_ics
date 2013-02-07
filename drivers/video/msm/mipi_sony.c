@@ -262,6 +262,7 @@ static int mipi_sony_lcd_on(struct platform_device *pdev)
 	return 0;
 }
 
+int mipi_samsung_lcd_off_running=0;
 static int mipi_sony_lcd_off(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;
@@ -282,8 +283,10 @@ static int mipi_sony_lcd_off(struct platform_device *pdev)
 		gpio_set_value(LCD_RESET, GPIO_HIGH_VALUE);
 		usleep(10);//msleep(120);
 
+		mipi_samsung_lcd_off_running=1;
 		mipi_dsi_cmds_tx(mfd, &sony_tx_buf, sony_display_off_cmds,
 				ARRAY_SIZE(sony_display_off_cmds));
+		mipi_samsung_lcd_off_running=0;
 		sony_state.disp_on = false;
 		sony_state.disp_initialized = false;
 	}
@@ -294,14 +297,14 @@ static int mipi_sony_lcd_off(struct platform_device *pdev)
 
 static int first_enable = 1;
 #if (BOARD_REV < WS20)
-static int prev_bl_level = BL_MAX;
+static int prev_bl_level = 8;
 #else
-static int prev_bl_level = BL_MAX;
+static int prev_bl_level = 10;
 #endif
 
 void mipi_sony_set_prev_bl_level(int bl_level)
 {
-	prev_bl_level = bl_level;
+	    prev_bl_level = bl_level;
 }
 
 static void mipi_sony_set_backlight(struct msm_fb_data_type *mfd)
@@ -405,7 +408,7 @@ static int __devinit mipi_sony_lcd_probe(struct platform_device *pdev)
 static struct platform_driver this_driver = {
 	.probe  = mipi_sony_lcd_probe,
 	.driver = {
-	.name   = "mipi_sony",
+		.name   = "mipi_sony",
 	},
 };
 

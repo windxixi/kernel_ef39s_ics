@@ -235,14 +235,14 @@ void mdp4_overlay_update_lcd(struct msm_fb_data_type *mfd)
 
 	mdp4_overlay_rgb_setup(pipe);
 
-	mdp4_mixer_stage_up(pipe);
+	mdp4_mixer_stage_up(pipe, 1);
 
 	mdp4_overlayproc_cfg(pipe);
 
 	mdp4_overlay_dmap_xy(pipe);
 
 	mdp4_overlay_dmap_cfg(mfd, 0);
-
+	mdp4_mixer_stage_commit(pipe->mixer_num);
 	mdp4_mddi_vsync_enable(mfd, pipe, 0);
 
 	/* MDP cmd block disable */
@@ -570,9 +570,28 @@ void mdp4_mddi_overlay_kickoff(struct msm_fb_data_type *mfd,
 				struct mdp4_overlay_pipe *pipe)
 {
 	unsigned long flag;
-	/* change mdp clk while mdp is idle` */
-	mdp4_set_perf_level();
 
+	if (mdp_hw_revision == MDP4_REVISION_V2_1) {
+		if (mdp4_overlay_status_read(MDP4_OVERLAY_TYPE_UNSET)) {
+			uint32  data;
+			data = inpdw(MDP_BASE + 0x0028);
+			data &= ~0x0300;        /* bit 8, 9, MASTER4 */
+			if (mfd->fbi->var.xres == 540) /* qHD, 540x960 */
+				data |= 0x0200;
+			else
+				data |= 0x0100;
+			MDP_OUTP(MDP_BASE + 0x00028, data);
+			mdp4_overlay_status_write(MDP4_OVERLAY_TYPE_UNSET,
+				false);
+		}
+		if (mdp4_overlay_status_read(MDP4_OVERLAY_TYPE_SET)) {
+			uint32  data;
+			data = inpdw(MDP_BASE + 0x0028);
+			data &= ~0x0300;        /* bit 8, 9, MASTER4 */
+			MDP_OUTP(MDP_BASE + 0x00028, data);
+			mdp4_overlay_status_write(MDP4_OVERLAY_TYPE_SET, false);
+		}
+	}
 	mdp_enable_irq(MDP_OVERLAY0_TERM);
 	spin_lock_irqsave(&mdp_spin_lock, flag);
 	mfd->dma->busy = TRUE;
@@ -656,9 +675,6 @@ void mdp4_dma_s_update_lcd(struct msm_fb_data_type *mfd,
 void mdp4_mddi_dma_s_kickoff(struct msm_fb_data_type *mfd,
 				struct mdp4_overlay_pipe *pipe)
 {
-	/* change mdp clk while mdp is idle` */
-	mdp4_set_perf_level();
-
 	mdp_enable_irq(MDP_DMA_S_TERM);
 
 	if (mddi_pipe->blt_addr == 0)
@@ -694,9 +710,10 @@ void mdp4_mddi_overlay(struct msm_fb_data_type *mfd)
 
 		if (mddi_pipe && mddi_pipe->blt_addr)
 			mdp4_mddi_blt_dmap_busy_wait(mfd);
-
+		mdp4_overlay_mdp_perf_upd(mfd, 0);
 		mdp4_overlay_update_lcd(mfd);
 
+		mdp4_overlay_mdp_perf_upd(mfd, 1);
 		if (mdp_hw_revision < MDP4_REVISION_V2_1) {
 			/* dmas dmap switch */
 			if (mdp4_overlay_mixer_play(mddi_pipe->mixer_num)

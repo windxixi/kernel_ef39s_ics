@@ -20,7 +20,6 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MAP_TABLE_SZ 64
 #define VCD_ENC_MAX_OUTBFRS_PER_FRAME 8
-#define MAX_DEC_TIME 33
 
 struct vcd_msm_map_buffer {
 	phys_addr_t phy_addr;
@@ -745,7 +744,8 @@ u32 vcd_free_one_buffer_internal(
 		return VCD_ERR_ILLEGAL_PARM;
 	}
 	if (buf_entry->in_use) {
-		VCD_MSG_ERROR("\n Buffer is in use and is not flushed");
+		VCD_MSG_ERROR("Buffer is in use and is not flushed: %p, %d\n",
+			buf_entry, buf_entry->in_use);
 		return VCD_ERR_ILLEGAL_OP;
 	}
 
@@ -944,7 +944,6 @@ struct vcd_buffer_entry *vcd_buffer_pool_entry_de_q
 		list_del(&entry->list);
 		pool->q_len--;
 	}
-
 	return entry;
 }
 
@@ -1044,6 +1043,7 @@ u32 vcd_flush_buffers(struct vcd_clnt_ctxt *cctxt, u32 mode)
 {
 	u32 rc = VCD_S_SUCCESS;
 	struct vcd_buffer_entry *buf_entry;
+	struct vcd_buffer_entry *orig_frame = NULL;
 
 	VCD_MSG_LOW("vcd_flush_buffers:");
 
@@ -1067,9 +1067,19 @@ u32 vcd_flush_buffers(struct vcd_clnt_ctxt *cctxt, u32 mode)
 							 vcd_frame_data),
 						cctxt,
 						cctxt->client_data);
+				orig_frame = vcd_find_buffer_pool_entry(
+						&cctxt->in_buf_pool,
+						buf_entry->virtual);
 				}
 
-			buf_entry->in_use = false;
+			if (orig_frame) {
+				orig_frame->in_use--;
+				if (orig_frame != buf_entry)
+					kfree(buf_entry);
+			} else {
+				buf_entry->in_use = false;
+				VCD_MSG_ERROR("Original frame not found in buffer pool\n");
+			}
 			VCD_BUFFERPOOL_INUSE_DECREMENT(
 				cctxt->in_buf_pool.in_use);
 			buf_entry = NULL;
@@ -1124,6 +1134,7 @@ u32 vcd_init_client_context(struct vcd_clnt_ctxt *cctxt)
 	cctxt->bframe = 0;
 	cctxt->cmd_q.pending_cmd = VCD_CMD_NONE;
 	cctxt->status.last_evt = VCD_EVT_RESP_BASE;
+	cctxt->num_slices = 1;
 	return rc;
 }
 
@@ -1295,6 +1306,7 @@ u32 vcd_submit_cmd_sess_start(struct vcd_transc *transc)
 		}
 
 	} else {
+		vcd_set_num_slices(transc->cctxt);
 		rc = ddl_encode_start(transc->cctxt->ddl_handle,
 					  (void *)transc);
 	}
@@ -1493,10 +1505,9 @@ u32 vcd_submit_frame(struct vcd_dev_ctxt *dev_ctxt,
 	struct vcd_buffer_entry *op_buf_entry = NULL;
 	u32 rc = VCD_S_SUCCESS;
 	u32 evcode = 0;
-	u32 perf_level = 0;
-	int decodeTime = 0;
 	struct ddl_frame_data_tag ddl_ip_frm;
-	struct ddl_frame_data_tag ddl_op_frm;
+	struct ddl_frame_data_tag *ddl_op_frm;
+	u32 out_buf_cnt = 0;
 
 	VCD_MSG_LOW("vcd_submit_frame:");
 	cctxt = transc->cctxt;
@@ -1508,44 +1519,52 @@ u32 vcd_submit_frame(struct vcd_dev_ctxt *dev_ctxt,
 	transc->flags = ip_frm_entry->flags;
 	ip_frm_entry->ip_frm_tag = (u32) transc;
 	memset(&ddl_ip_frm, 0, sizeof(ddl_ip_frm));
-	memset(&ddl_op_frm, 0, sizeof(ddl_op_frm));
 	if (cctxt->decoding) {
-		decodeTime = ddl_get_core_decode_proc_time(cctxt->ddl_handle);
-		if (decodeTime > MAX_DEC_TIME) {
-			if (res_trk_get_curr_perf_level(&perf_level)) {
-				vcd_update_decoder_perf_level(dev_ctxt,
-				   res_trk_estimate_perf_level(perf_level));
-				ddl_reset_avg_dec_time(cctxt->ddl_handle);
-			} else
-				VCD_MSG_ERROR("%s(): retrieve curr_perf_level"
-						"returned FALSE\n", __func__);
-		}
 		evcode = CLIENT_STATE_EVENT_NUMBER(decode_frame);
 		ddl_ip_frm.vcd_frm = *ip_frm_entry;
 		rc = ddl_decode_frame(cctxt->ddl_handle, &ddl_ip_frm,
-							   (void *) transc);
+							(void *) transc);
 	} else {
-		op_buf_entry = vcd_buffer_pool_entry_de_q(
-			&cctxt->out_buf_pool);
-		if (!op_buf_entry) {
-			VCD_MSG_ERROR("Sched provided frame when no"
-				"op buffer was present");
-			rc = VCD_ERR_FAIL;
-		} else {
+		ddl_op_frm = (struct ddl_frame_data_tag *)
+			kmalloc((sizeof(struct ddl_frame_data_tag) *
+			VCD_ENC_MAX_OUTBFRS_PER_FRAME), GFP_KERNEL);
+		if (!ddl_op_frm) {
+			VCD_MSG_ERROR("Memory allocation failure");
+			return VCD_ERR_ALLOC_FAIL;
+		}
+		memset(ddl_op_frm, 0, (sizeof(struct ddl_frame_data_tag) *
+			VCD_ENC_MAX_OUTBFRS_PER_FRAME));
+		for (out_buf_cnt = 0; out_buf_cnt < cctxt->num_slices ;
+				out_buf_cnt++) {
+			op_buf_entry = vcd_buffer_pool_entry_de_q(
+				&cctxt->out_buf_pool);
+			if (!op_buf_entry) {
+				VCD_MSG_ERROR("Sched provided frame when no"
+					"op buffer was present");
+				rc = VCD_ERR_FAIL;
+				break;
+			}
 			op_buf_entry->in_use = true;
 			cctxt->out_buf_pool.in_use++;
-			ddl_ip_frm.vcd_frm = *ip_frm_entry;
-			ddl_ip_frm.frm_delta =
-				vcd_calculate_frame_delta(cctxt,
-					ip_frm_entry);
-
-			ddl_op_frm.vcd_frm = op_buf_entry->frame;
-
-			evcode = CLIENT_STATE_EVENT_NUMBER(encode_frame);
-
-			rc = ddl_encode_frame(cctxt->ddl_handle,
-				&ddl_ip_frm, &ddl_op_frm, (void *) transc);
+			ddl_op_frm[out_buf_cnt].vcd_frm = op_buf_entry->frame;
+			VCD_MSG_LOW("%s : buffer_cnt = %d framebfr(virtual)"
+				" 0x%p", __func__, out_buf_cnt,
+				op_buf_entry->frame.virtual);
+			VCD_MSG_LOW("framebfr(physical) 0x%p bfrlength %d",
+				op_buf_entry->frame.physical,
+				op_buf_entry->frame.alloc_len);
 		}
+		ddl_ip_frm.vcd_frm = *ip_frm_entry;
+		ddl_ip_frm.frm_delta =
+			vcd_calculate_frame_delta(cctxt,
+				ip_frm_entry);
+		evcode = CLIENT_STATE_EVENT_NUMBER(encode_frame);
+
+		if (!VCD_FAILED(rc)) {
+			rc = ddl_encode_frame(cctxt->ddl_handle,
+				&ddl_ip_frm, &ddl_op_frm[0], (void *) transc);
+		}
+		kfree(ddl_op_frm);
 	}
 	ip_frm_entry->ip_frm_tag = transc->ip_frm_tag;
 	if (!VCD_FAILED(rc)) {
@@ -1880,17 +1899,21 @@ struct vcd_transc *vcd_get_free_trans_tbl_entry
 	} else {
 		memset(&dev_ctxt->trans_tbl[i], 0,
 			   sizeof(struct vcd_transc));
-
 		dev_ctxt->trans_tbl[i].in_use = true;
-
+		VCD_MSG_LOW("%s: Get transc = 0x%x, in_use = %u\n",
+			__func__, (u32)(&dev_ctxt->trans_tbl[i]),
+			dev_ctxt->trans_tbl[i].in_use);
 		return &dev_ctxt->trans_tbl[i];
 	}
 }
 
 void vcd_release_trans_tbl_entry(struct vcd_transc *trans_entry)
 {
-	if (trans_entry)
+	if (trans_entry) {
 		trans_entry->in_use = false;
+		VCD_MSG_LOW("%s: Free transc = 0x%x, in_use = %u\n",
+			__func__, (u32)trans_entry, trans_entry->in_use);
+	}
 }
 
 u32 vcd_handle_input_done(
@@ -1902,6 +1925,7 @@ u32 vcd_handle_input_done(
 		(struct ddl_frame_data_tag *) payload;
 	struct vcd_buffer_entry *orig_frame = NULL;
 	u32 rc;
+	VCD_MSG_LOW("%s\n", __func__);
 
 	if (!cctxt->status.frame_submitted &&
 		!cctxt->status.frame_delayed) {
@@ -1949,8 +1973,11 @@ u32 vcd_handle_input_done(
 	transc->ip_buf_entry = NULL;
 	transc->input_done = true;
 
-	if (transc->input_done && transc->frame_done)
+	if (transc->input_done && transc->frame_done) {
+		VCD_MSG_LOW("%s Calling vcd_release_trans_tbl_entry\n",
+		__func__);
 		vcd_release_trans_tbl_entry(transc);
+	}
 
 	if (VCD_FAILED(status)) {
 		VCD_MSG_ERROR("INPUT_DONE returned err = 0x%x", status);
@@ -1989,6 +2016,7 @@ u32 vcd_handle_input_done_in_eos(
 		(struct ddl_frame_data_tag *) payload;
 	u32 rc = VCD_ERR_FAIL, codec_config = false;
 	u32 core_type = res_trk_get_core_type();
+	VCD_MSG_LOW("%s\n", __func__);
 	rc = vcd_validate_io_done_pyld(cctxt, payload, status);
 	if (rc == VCD_ERR_CLIENT_FATAL)
 		vcd_handle_clnt_fatal_input_done(cctxt, frame->frm_trans_end);
@@ -2038,8 +2066,8 @@ u32 vcd_validate_io_done_pyld(
 		rc = VCD_ERR_CLIENT_FATAL;
 
 	if (VCD_FAILED(rc)) {
-		VCD_MSG_FATAL(
-			"vcd_validate_io_done_pyld: invalid transaction");
+		VCD_MSG_FATAL("vcd_validate_io_done_pyld: "\
+			"invalid transaction 0x%x", (u32)transc);
 	} else if (!frame->vcd_frm.virtual &&
 		status != VCD_ERR_INTRLCD_FIELD_DROP)
 		rc = VCD_ERR_BAD_POINTER;
@@ -2094,6 +2122,7 @@ u32 vcd_handle_output_required(struct vcd_clnt_ctxt
 	struct ddl_frame_data_tag *frame =
 		(struct ddl_frame_data_tag *)payload;
 	u32 rc = VCD_S_SUCCESS;
+	VCD_MSG_LOW("%s\n", __func__);
 
 	if (!cctxt->status.frame_submitted &&
 		!cctxt->status.frame_delayed) {
@@ -2154,6 +2183,7 @@ struct vcd_clnt_ctxt *cctxt, void *payload)
 	struct vcd_transc *transc;
 	struct ddl_frame_data_tag *frame =
 		(struct ddl_frame_data_tag *)payload;
+	VCD_MSG_LOW("%s\n", __func__);
 
 	rc = vcd_validate_io_done_pyld(cctxt, payload, VCD_S_SUCCESS);
 	if (rc == VCD_ERR_CLIENT_FATAL)
@@ -2187,6 +2217,7 @@ u32 vcd_handle_frame_done(
 	struct vcd_transc *transc;
 	u32 rc;
 	s64 time_stamp;
+	VCD_MSG_LOW("%s\n", __func__);
 
 	rc = vcd_validate_io_done_pyld(cctxt, payload, status);
 	if (rc == VCD_ERR_CLIENT_FATAL)
@@ -2276,7 +2307,7 @@ u32 vcd_handle_frame_done_in_eos(
 	struct ddl_frame_data_tag *frame =
 		(struct ddl_frame_data_tag *) payload;
 	u32 rc = VCD_S_SUCCESS;
-	VCD_MSG_LOW("vcd_handle_frame_done_in_eos:");
+	VCD_MSG_LOW("%s\n", __func__);
 	rc = vcd_validate_io_done_pyld(cctxt, payload, status);
 	if (rc == VCD_ERR_CLIENT_FATAL)
 		vcd_handle_clnt_fatal(cctxt, frame->frm_trans_end);
@@ -3377,4 +3408,24 @@ void vcd_handle_ind_info_output_reconfig(
 		cctxt->callback(VCD_EVT_IND_INFO_OUTPUT_RECONFIG, status, NULL,
 		 0, cctxt, cctxt->client_data);
 	}
+}
+
+u32 vcd_set_num_slices(struct vcd_clnt_ctxt *cctxt)
+{
+	struct vcd_property_hdr prop_hdr;
+	struct vcd_property_slice_delivery_info slice_delivery_info;
+	u32 rc = VCD_S_SUCCESS;
+	prop_hdr.prop_id = VCD_I_SLICE_DELIVERY_MODE;
+	prop_hdr.sz = sizeof(struct vcd_property_slice_delivery_info);
+	rc = ddl_get_property(cctxt->ddl_handle, &prop_hdr,
+				&slice_delivery_info);
+	VCD_FAILED_RETURN(rc, "Failed: Get VCD_I_SLICE_DELIVERY_MODE");
+	if (slice_delivery_info.enable) {
+		cctxt->num_slices = slice_delivery_info.num_slices;
+		VCD_MSG_LOW("%s slice delivery mode num_slices = %u\n",
+					__func__, cctxt->num_slices);
+	} else {
+		cctxt->num_slices = 1;
+	}
+	return rc;
 }

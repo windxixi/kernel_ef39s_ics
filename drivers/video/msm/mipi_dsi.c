@@ -36,10 +36,11 @@
 #include "mdp4.h"
 
 u32 dsi_irq;
+u32 esc_byte_ratio;
 
-#ifndef CONFIG_FB_MSM_MIPI_DSI_SAMSUNG 
+//#ifndef CONFIG_FB_MSM_MIPI_DSI_SAMSUNG 
 static boolean tlmm_settings = FALSE;
-#endif
+//#endif
 
 static int mipi_dsi_probe(struct platform_device *pdev);
 static int mipi_dsi_remove(struct platform_device *pdev);
@@ -83,8 +84,6 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	struct msm_fb_data_type *mfd;
 	struct msm_panel_info *pinfo;
 
-	pr_debug("%s+:\n", __func__);
-
 	mfd = platform_get_drvdata(pdev);
 	pinfo = &mfd->panel_info;
 
@@ -95,23 +94,13 @@ static int mipi_dsi_off(struct platform_device *pdev)
 
 	mdp4_overlay_dsi_state_set(ST_DSI_SUSPEND);
 
-	/*
-	 * Description: dsi clock is need to perform shutdown.
-	 * mdp4_dsi_cmd_dma_busy_wait() will enable dsi clock if disabled.
-	 * also, wait until dma (overlay and dmap) finish.
+	/* make sure dsi clk is on so that
+	 * dcs commands can be sent
 	 */
-	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
-		if (mdp_rev >= MDP_REV_41) {
-			mdp4_dsi_cmd_dma_busy_wait(mfd);
-			mdp4_dsi_blt_dmap_busy_wait(mfd);
-			mipi_dsi_mdp_busy_wait(mfd);
-		} else {
-			mdp3_dsi_cmd_dma_busy_wait(mfd);
-		}
-	} else {
-		/* video mode, wait until fifo cleaned */
-		mipi_dsi_controller_cfg(0);
-	}
+	mipi_dsi_clk_cfg(1);
+
+	/* make sure dsi_cmd_mdp is idle */
+	mipi_dsi_cmd_mdp_busy();
 
 	/*
 	 * Desctiption: change to DSI_CMD_MODE since it needed to
@@ -135,24 +124,18 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	mdp_bus_scale_update_request(0);
 #endif
 
-#if defined(CONFIG_FB_MSM_MIPI_DSI_SAMSUNG) || defined(CONFIG_FB_MSM_MIPI_DSI_SONY)  
-	mipi_lane_ctrl_ULPS(1);
-#endif
-
-	local_bh_disable();
+	spin_lock_bh(&dsi_clk_lock);
 	mipi_dsi_clk_disable();
-	local_bh_enable();
 
 	/* disbale dsi engine */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0000, 0);
 
 	mipi_dsi_phy_ctrl(0);
 
-
-	local_bh_disable();
 	mipi_dsi_ahb_ctrl(0);
-	local_bh_enable();
+	spin_unlock_bh(&dsi_clk_lock);
 
+	mipi_dsi_unprepare_clocks();
 	if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
 		mipi_dsi_pdata->dsi_power_save(0);
 
@@ -161,11 +144,10 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	else
 		up(&mfd->dma->mutex);
 
-	pr_debug("%s-:\n", __func__);
-
 	return ret;
 }
 
+extern struct mdp4_overlay_perf perf_current;
 static int mipi_dsi_on(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -177,25 +159,22 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	struct mipi_panel_info *mipi;
 	u32 hbp, hfp, vbp, vfp, hspw, vspw, width, height;
 	u32 ystride, bpp, data;
-#ifdef F_SKYDISP_DSI_PADDING
 	u32 dummy_xres, dummy_yres;
-#endif
 	int target_type = 0;
 
 	mfd = platform_get_drvdata(pdev);
 	fbi = mfd->fbi;
 	var = &fbi->var;
 	pinfo = &mfd->panel_info;
-
-	pr_debug("%s+:\n", __func__);
+	esc_byte_ratio = pinfo->mipi.esc_byte_ratio;
 
 	if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
 		mipi_dsi_pdata->dsi_power_save(1);
 
-	cont_splash_clk_ctrl();
-	local_bh_disable();
+	cont_splash_clk_ctrl(0);
+	mipi_dsi_prepare_clocks();
+
 	mipi_dsi_ahb_ctrl(1);
-	local_bh_enable();
 
 	clk_rate = mfd->fbi->var.pixclock;
 	clk_rate = min(clk_rate, mfd->panel_info.clk_max);
@@ -227,26 +206,10 @@ static int mipi_dsi_on(struct platform_device *pdev)
 
 	mipi_dsi_phy_init(0, &(mfd->panel_info), target_type);
 
-	local_bh_disable();
 	mipi_dsi_clk_enable();
-	local_bh_enable();
 
 	mipi  = &mfd->panel_info.mipi;
 	if (mfd->panel_info.type == MIPI_VIDEO_PANEL) {
-		/* 250Mbps */
-#if defined(CONFIG_FB_MSM_MIPI_DSI_SONY) && (BOARD_REV <= WS20)
-		MIPI_OUTP(MIPI_DSI_BASE + 0x20,
-				((hbp + width - 1) << 16 | (hbp - 1)));
-		MIPI_OUTP(MIPI_DSI_BASE + 0x24,
-				((vbp + height - 1) << 16 | (vbp - 1)));
-		MIPI_OUTP(MIPI_DSI_BASE + 0x28,
-				(vbp + height + vfp - 1) << 16 |
-				(hbp + width + hfp - 1));
-		MIPI_OUTP(MIPI_DSI_BASE + 0x2c, (hspw - 1) << 16);
-		MIPI_OUTP(MIPI_DSI_BASE + 0x30, 0);
-		MIPI_OUTP(MIPI_DSI_BASE + 0x34, (vspw - 1) << 16);
-#else
-#ifdef F_SKYDISP_DSI_PADDING
 		dummy_xres = mfd->panel_info.mipi.xres_pad;
 		dummy_yres = mfd->panel_info.mipi.yres_pad;
 
@@ -273,35 +236,11 @@ static int mipi_dsi_on(struct platform_device *pdev)
 				(vbp + height + dummy_yres + vfp) << 16 |
 					(hbp + width + dummy_xres + hfp));
 		}
-#else
-		if (mdp_rev >= MDP_REV_41) {
-			MIPI_OUTP(MIPI_DSI_BASE + 0x20,
-				((hspw + hbp + width) << 16 |
-				(hspw + hbp)));
-			MIPI_OUTP(MIPI_DSI_BASE + 0x24,
-				((vspw + vbp + height) << 16 |
-				(vspw + vbp)));
-			MIPI_OUTP(MIPI_DSI_BASE + 0x28,
-				(vspw + vbp + height +
-					vfp - 1) << 16 | (hspw + hbp +
-					width + hfp - 1));
-		} else {
-			/* DSI_LAN_SWAP_CTRL */
-			MIPI_OUTP(MIPI_DSI_BASE + 0x00ac, mipi->dlane_swap);
 
-			MIPI_OUTP(MIPI_DSI_BASE + 0x20,
-				((hbp + width) << 16 | (hbp)));
-			MIPI_OUTP(MIPI_DSI_BASE + 0x24,
-				((vbp + height) << 16 | (vbp)));
-			MIPI_OUTP(MIPI_DSI_BASE + 0x28,
-				(vbp + height + vfp) << 16 |
-					(hbp + width + hfp));
-		}
-#endif
 		MIPI_OUTP(MIPI_DSI_BASE + 0x2c, (hspw << 16));
 		MIPI_OUTP(MIPI_DSI_BASE + 0x30, 0);
 		MIPI_OUTP(MIPI_DSI_BASE + 0x34, (vspw << 16));
-#endif
+
 	} else {		/* command mode */
 		if (mipi->dst_format == DSI_CMD_DST_FORMAT_RGB888)
 			bpp = 3;
@@ -345,7 +284,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 
 	mipi_dsi_op_mode_config(mipi->mode);
 
-#ifndef CONFIG_FB_MSM_MIPI_DSI_SAMSUNG
 	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
 		if (pinfo->lcd.vsync_enable) {
 			if (pinfo->lcd.hw_vsync_mode && vsync_gpio >= 0) {
@@ -392,10 +330,11 @@ static int mipi_dsi_on(struct platform_device *pdev)
 			mipi_dsi_set_tear_on(mfd);
 		}
 	}
-#endif //CONFIG_FB_MSM_MIPI_DSI_SAMSUNG
 
 #ifdef CONFIG_MSM_BUS_SCALING
 	mdp_bus_scale_update_request(2);
+	perf_current.mdp_bw = OVERLAY_PERF_LEVEL4;
+	perf_current.mdp_clk_rate = 0;
 #endif
 
 	mdp4_overlay_dsi_state_set(ST_DSI_RESUME);
@@ -404,8 +343,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 		mutex_unlock(&mfd->dma->ov_mutex);
 	else
 		up(&mfd->dma->mutex);
-
-	pr_debug("%s-:\n", __func__);
 
 	return ret;
 }
@@ -499,12 +436,21 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 			}
 		}
 
+		if (mipi_dsi_clk_init(pdev))
+			return -EPERM;
+
+		if (mipi_dsi_pdata->splash_is_enabled &&
+			!mipi_dsi_pdata->splash_is_enabled()) {
+			mipi_dsi_ahb_ctrl(1);
+			MIPI_OUTP(MIPI_DSI_BASE + 0x118, 0);
+			MIPI_OUTP(MIPI_DSI_BASE + 0x0, 0);
+			MIPI_OUTP(MIPI_DSI_BASE + 0x200, 0);
+			mipi_dsi_ahb_ctrl(0);
+		}
 		mipi_dsi_resource_initialized = 1;
 
 		return 0;
 	}
-
-	mipi_dsi_clk_init(pdev);
 
 	if (!mipi_dsi_resource_initialized)
 		return -EPERM;
@@ -520,6 +466,8 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 	if (pdev_list_cnt >= MSM_FB_MAX_DEV_LIST)
 		return -ENOMEM;
 
+	if (!mfd->cont_splash_done)
+		cont_splash_clk_ctrl(1);
 
 	mdp_dev = platform_device_alloc("mdp", pdev->id);
 	if (!mdp_dev)
@@ -616,10 +564,9 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 
 	if (mfd->panel_info.type == MIPI_VIDEO_PANEL &&
 		!mfd->panel_info.clk_rate) {
-#ifdef F_SKYDISP_DSI_PADDING
 		h_period += mfd->panel_info.mipi.xres_pad;
 		v_period += mfd->panel_info.mipi.yres_pad;
-#endif
+
 		if (lanes > 0) {
 			mfd->panel_info.clk_rate =
 			((h_period * v_period * (mipi->frame_rate) * bpp * 8)

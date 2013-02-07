@@ -19,16 +19,12 @@
 #define DEV_DBG_PREFIX "EXT_INTERFACE: "
 #endif
 #define DEV_DBG(args...)	pr_debug(DEV_DBG_PREFIX args)
+#else
+#define DEV_DBG(args...)	(void)0
+#endif /* DEBUG */
 #define DEV_INFO(args...)	dev_info(external_common_state->dev, args)
 #define DEV_WARN(args...)	dev_warn(external_common_state->dev, args)
 #define DEV_ERR(args...)	dev_err(external_common_state->dev, args)
-#else
-#define DEV_DBG(args...)	(void)0
-#define DEV_INFO(args...)	(void)0
-#define DEV_WARN(args...)	(void)0
-#define DEV_ERR(args...)	(void)0
-#endif /* DEBUG */
-
 
 #ifdef CONFIG_FB_MSM_TVOUT
 #define TVOUT_VFRMT_NTSC_M_720x480i		0
@@ -226,6 +222,9 @@ struct external_common_state_type {
 	int (*read_edid_block)(int block, uint8 *edid_buf);
 	int (*hpd_feature)(int on);
 #endif
+#ifdef CONFIG_LGE_MHL_SII9244	
+	int cable_connected;
+#endif
 };
 
 /* The external interface driver needs to initialize the common state. */
@@ -258,4 +257,7 @@ void hdmi_common_init_panel_info(struct msm_panel_info *pinfo);
 int external_common_state_create(struct platform_device *pdev);
 void external_common_state_remove(void);
 
+#ifdef CONFIG_LGE_MHL_SII9244	
+extern int mhl_power_on(void);
+#endif 
 #endif /* __EXTERNAL_COMMON_H__ */

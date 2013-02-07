@@ -76,6 +76,7 @@ const char edid_blk1[0x100] = {
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xDF};
 #endif /* DEBUG_EDID */
 
+#ifdef CONFIG_FB_MSM_HDMI_MHL
 #define DMA_E_BASE 0xB0000
 void mdp_vid_quant_set(void)
 {
@@ -92,6 +93,15 @@ void mdp_vid_quant_set(void)
 		MDP_OUTP(MDP_BASE + DMA_E_BASE + 0x78, 0x00FF0000);
 	}
 }
+#else
+void mdp_vid_quant_set(void)
+{
+	/*
+	 * Support for quantization to be added
+	 * only when MHL support is included.
+	 */
+}
+#endif
 
 const char *video_format_2string(uint32 format)
 {
@@ -366,6 +376,7 @@ static ssize_t hdmi_common_wta_hpd(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	ssize_t ret = strnlen(buf, PAGE_SIZE);
+#ifndef CONFIG_LGE_MHL_SII9244	
 	int hpd;
 	if (hdmi_prim_display)
 		hpd = 1;
@@ -390,6 +401,7 @@ static ssize_t hdmi_common_wta_hpd(struct device *dev,
 	} else {
 		DEV_DBG("%s: 'not supported'\n", __func__);
 	}
+#endif //CONFIG_LGE_MHL_SII9244	
 
 	return ret;
 }
@@ -519,7 +531,7 @@ static ssize_t hdmi_msm_wta_cec_frame(struct device *dev,
 			if (hdmi_msm_state->fsm_reset_done)
 				retry++;
 			mutex_unlock(&hdmi_msm_state_mutex);
-			msleep(20);
+			msleep(360);
 		} else
 			break;
 	}
@@ -1574,7 +1586,7 @@ bool hdmi_common_get_video_format_from_drv_data(struct msm_fb_data_type *mfd)
 				: HDMI_VFRMT_1440x576i50_16_9;
 			break;
 		case 1920:
-#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244  // 20110429, kkcho, MHL»ç¿ëÀ» À§ÇØ HDMI OUTPUT format À» ³·Ãá´Ù... (temp´Ù )	
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244  // 20110429, kkcho, MHL??? ?? HDMI OUTPUT format ? ???... (temp? )	
 			format = HDMI_VFRMT_1920x1080p30_16_9;//HDMI_VFRMT_1280x720p50_16_9;
 #else
 			format = HDMI_VFRMT_1920x1080p60_16_9;
@@ -1664,13 +1676,9 @@ void hdmi_common_init_panel_info(struct msm_panel_info *pinfo)
 	pinfo->wait_cycle = 0;
 	pinfo->bpp = 24;
 	if (hdmi_prim_display)
-	pinfo->fb_num = 2;
+		pinfo->fb_num = 2;
 	else
-#ifdef CONFIG_F_SKYDISP_HDMI_CAPTION
-	pinfo->fb_num = 2; // For double buffering
-#else
-	pinfo->fb_num = 1;
-#endif
+		pinfo->fb_num = 2; //1;  For double buffering
 
 	/* blk */
 	pinfo->lcdc.border_clr = 0;
@@ -1679,4 +1687,50 @@ void hdmi_common_init_panel_info(struct msm_panel_info *pinfo)
 	pinfo->lcdc.hsync_skew = 0;
 }
 EXPORT_SYMBOL(hdmi_common_init_panel_info);
+
+#ifdef CONFIG_LGE_MHL_SII9244  /* chanhee.park@lge.com */
+void hdmi_common_send_uevent(char *buf)
+{
+	char *envp[2];
+	int env_offset = 0;
+
+	envp[env_offset++] = buf;
+	envp[env_offset] = NULL;
+	
+	kobject_uevent_env(external_common_state->uevent_kobj,KOBJ_CHANGE, envp); 
+}
+
+EXPORT_SYMBOL(hdmi_common_send_uevent);
+
+/* I-project scenario - HPD on when MHL cable is detected
+*/
+extern boolean hdmi_msm_panel_power(void);
+
+void hdmi_common_set_hpd(int on)
+{
+	int count = 0;
+	
+	if(on == 1){
+		for(count = 0 ; count < 50 ; count++){
+			if(!hdmi_msm_panel_power()){
+				DEV_DBG("hdmi_common_set_hpd: count[%d]\n",count);
+				break;
+			}
+			msleep(10);
+		}
+
+		external_common_state->hpd_feature(1);		
+		external_common_state->hpd_feature_on = 1;
+		external_common_state->cable_connected = 0;
+	}
+	else{
+		//external_common_state->hpd_feature(0);		
+		external_common_state->hpd_feature_on = 0;
+		external_common_state->cable_connected = 0;
+	}
+}
+
+EXPORT_SYMBOL(hdmi_common_set_hpd);
+
+#endif  // CONFIG_LGE_MHL_SII9244 
 #endif

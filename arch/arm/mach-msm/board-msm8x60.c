@@ -11546,46 +11546,9 @@ static int atv_dac_power(int on)
 #endif
 
 #define MDP_VSYNC_GPIO			28
-#ifdef CONFIG_FB_MSM_MIPI_DSI
-int mdp_core_clk_rate_table[] = {
-// [LS5] 2011.08.18 by lived
-#if defined (CONFIG_FB_MSM_MIPI_DSI_SAMSUNG)
-	128000000,
-	128000000,
-	177780000,
-#elif defined (CONFIG_FB_MSM_MIPI_DSI_SONY)
-	85330000,
-	85330000,
-	200000000,
-#else
-	85330000,
-	128000000,
-	160000000,
-#endif
-	200000000,
-};
-#else
-int mdp_core_clk_rate_table[] = {
-#ifdef CONFIG_MACH_MSM8X60_PRESTO
-	85330000,
-#else
-	59080000,
-#endif
-	128000000,
-	128000000,
-	200000000,
-};
-#endif
-
 static struct msm_panel_common_pdata mdp_pdata = {
-	//.gpio = MDP_VSYNC_GPIO,
-#if defined(CONFIG_FB_MSM_MIPI_DSI)
-	.mdp_core_clk_rate = 128000000,
-#else
-	.mdp_core_clk_rate = 59080000,
-#endif
-	.mdp_core_clk_table = mdp_core_clk_rate_table,
-	.num_mdp_clk = ARRAY_SIZE(mdp_core_clk_rate_table),
+	.gpio = MDP_VSYNC_GPIO,
+	.mdp_max_clk = 200000000,
 #ifdef CONFIG_MSM_BUS_SCALING
 	.mdp_bus_scale_table = &mdp_bus_scale_pdata,
 #endif

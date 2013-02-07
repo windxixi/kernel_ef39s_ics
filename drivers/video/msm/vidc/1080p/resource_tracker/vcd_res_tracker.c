@@ -28,8 +28,8 @@
 #define PIL_FW_BASE_ADDR 0xafe00000
 #define PIL_FW_SIZE 0x200000
 
-static unsigned int vidc_clk_table[4] = {
-	48000000, 133330000, 200000000, 228570000,
+static unsigned int vidc_clk_table[3] = {
+	48000000, 133330000, 200000000
 };
 static unsigned int restrk_mmu_subsystem[] =	{
 		MSM_SUBSYSTEM_VIDEO, MSM_SUBSYSTEM_VIDEO_FWARE};
@@ -157,7 +157,7 @@ ion_bail_out:
 
 static void res_trk_pmem_free(struct ddl_buf_addr *addr)
 {
-	/*TODO: Enhance for pmem*/
+	/* TODO Pmem*/
 	struct ddl_context *ddl_context;
 	ddl_context = ddl_get_context();
 	if (ddl_context->video_ion_client) {
@@ -203,8 +203,7 @@ static int res_trk_pmem_alloc
 				rc = -ENOMEM;
 				goto bail_out;
 			}
-		}
-		else {
+		} else {
 			addr->alloc_handle = NULL;
 			addr->alloced_phys_addr = PIL_FW_BASE_ADDR;
 			addr->buffer_size = sz;
@@ -216,6 +215,7 @@ static int res_trk_pmem_alloc
 		if (!addr->alloced_phys_addr) {
 			DDL_MSG_ERROR("%s() : acm alloc failed (%d)\n",
 					__func__, alloc_size);
+			rc = -ENOMEM;
 			goto bail_out;
 		}
 		addr->buffer_size = sz;
@@ -529,27 +529,17 @@ int res_trk_update_bus_perf_level(struct vcd_dev_ctxt *dev_ctxt, u32 perf_level)
 			enc_perf_level += cctxt_itr->reqd_perf_lvl;
 		cctxt_itr = cctxt_itr->next;
 	}
-
 	if (!enc_perf_level)
 		client_type = 1;
 	if (perf_level <= RESTRK_1080P_VGA_PERF_LEVEL)
 		bus_clk_index = 0;
 	else if (perf_level <= RESTRK_1080P_720P_PERF_LEVEL)
 		bus_clk_index = 1;
-	else if (perf_level <= RESTRK_1080P_MAX_PERF_LEVEL)
-		bus_clk_index = 2;
 	else
-		bus_clk_index = 3;
+		bus_clk_index = 2;
 
 	if (dev_ctxt->reqd_perf_lvl + dev_ctxt->curr_perf_lvl == 0)
 		bus_clk_index = 2;
-	else if (resource_context.vidc_platform_data->disable_turbo
-						&& bus_clk_index == 3) {
-		VCDRES_MSG_ERROR("Warning: Turbo mode not supported "
-				" falling back to 1080p bus\n");
-		bus_clk_index = 2;
-	}
-
 	bus_clk_index = (bus_clk_index << 1) + (client_type + 1);
 	VCDRES_MSG_LOW("%s(), bus_clk_index = %d", __func__, bus_clk_index);
 	VCDRES_MSG_LOW("%s(),context.pcl = %x", __func__, resource_context.pcl);
@@ -570,13 +560,6 @@ u32 res_trk_set_perf_level(u32 req_perf_lvl, u32 *pn_set_perf_lvl,
 		return false;
 	}
 	VCDRES_MSG_LOW("%s(), req_perf_lvl = %d", __func__, req_perf_lvl);
-
-	if (resource_context.vidc_platform_data->disable_turbo
-			&& req_perf_lvl > RESTRK_1080P_MAX_PERF_LEVEL) {
-		VCDRES_MSG_ERROR("%s(): Turbo not supported! dev_ctxt(%p)\n",
-			__func__, dev_ctxt);
-	}
-
 #ifdef CONFIG_MSM_BUS_SCALING
 	if (!res_trk_update_bus_perf_level(dev_ctxt, req_perf_lvl) < 0) {
 		VCDRES_MSG_ERROR("%s(): update buf perf level failed\n",
@@ -594,22 +577,10 @@ u32 res_trk_set_perf_level(u32 req_perf_lvl, u32 *pn_set_perf_lvl,
 	} else if (req_perf_lvl <= RESTRK_1080P_720P_PERF_LEVEL) {
 		vidc_freq = vidc_clk_table[1];
 		*pn_set_perf_lvl = RESTRK_1080P_720P_PERF_LEVEL;
-	} else if (req_perf_lvl <= RESTRK_1080P_MAX_PERF_LEVEL) {
-		vidc_freq = vidc_clk_table[2];
-		*pn_set_perf_lvl = RESTRK_1080P_MAX_PERF_LEVEL;
 	} else {
-		vidc_freq = vidc_clk_table[3];
-		*pn_set_perf_lvl = RESTRK_1080P_TURBO_PERF_LEVEL;
-	}
-
-	if (resource_context.vidc_platform_data->disable_turbo &&
-		*pn_set_perf_lvl == RESTRK_1080P_TURBO_PERF_LEVEL) {
-		VCDRES_MSG_ERROR("Warning: Turbo mode not supported "
-				" falling back to 1080p clocks\n");
 		vidc_freq = vidc_clk_table[2];
 		*pn_set_perf_lvl = RESTRK_1080P_MAX_PERF_LEVEL;
 	}
-
 	resource_context.perf_level = *pn_set_perf_lvl;
 	VCDRES_MSG_MED("VIDC: vidc_freq = %u, req_perf_lvl = %u\n",
 		vidc_freq, req_perf_lvl);
@@ -844,10 +815,6 @@ u32 res_trk_get_disable_dmx(void){
 	return resource_context.disable_dmx;
 }
 
-u32 res_trk_get_min_dpb_count(void){
-	return resource_context.vidc_platform_data->cont_mode_dpb_count;
-}
-
 void res_trk_set_mem_type(enum ddl_mem_area mem_type)
 {
 	resource_context.res_mem_type = mem_type;
@@ -984,26 +951,9 @@ u32 get_res_trk_perf_level(enum vcd_perf_level perf_level)
 	case VCD_PERF_LEVEL2:
 		res_trk_perf_level = RESTRK_1080P_MAX_PERF_LEVEL;
 		break;
-	case VCD_PERF_LEVEL_TURBO:
-		res_trk_perf_level = RESTRK_1080P_TURBO_PERF_LEVEL;
-		break;
 	default:
 		VCD_MSG_ERROR("Invalid perf level: %d\n", perf_level);
 		res_trk_perf_level = -EINVAL;
 	}
 	return res_trk_perf_level;
-}
-
-u32 res_trk_estimate_perf_level(u32 pn_perf_lvl)
-{
-	VCDRES_MSG_MED("%s(), req_perf_lvl = %d", __func__, pn_perf_lvl);
-	if ((pn_perf_lvl >= RESTRK_1080P_VGA_PERF_LEVEL) &&
-		(pn_perf_lvl < RESTRK_1080P_720P_PERF_LEVEL)) {
-		return RESTRK_1080P_720P_PERF_LEVEL;
-	} else if ((pn_perf_lvl >= RESTRK_1080P_720P_PERF_LEVEL) &&
-			(pn_perf_lvl < RESTRK_1080P_MAX_PERF_LEVEL)) {
-		return RESTRK_1080P_MAX_PERF_LEVEL;
-	} else {
-		return pn_perf_lvl;
-	}
 }
