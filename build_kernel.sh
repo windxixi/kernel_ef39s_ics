@@ -17,7 +17,7 @@ export CROSS_COMPILE=/home/windxixi/slimrom/prebuilt/linux-x86/toolchain/arm-eab
 ##############################################################################
  
 make  msm8660-perf-EF39S_TP30_defconfig
-make -j4  
+make -j2  
 
 ##############################################################################
 # Copy Kernel Image

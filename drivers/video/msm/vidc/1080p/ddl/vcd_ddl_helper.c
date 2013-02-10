@@ -788,7 +788,7 @@ u32 ddl_calc_enc_hw_buffers_size(enum vcd_codec codec, u32 width,
 		sz_strm = DDL_ALIGN(ddl_get_yuv_buf_size(width, height,
 			DDL_YUV_BUF_TYPE_LINEAR) + ddl_get_yuv_buf_size(width,
 			height/2, DDL_YUV_BUF_TYPE_LINEAR), DDL_KILO_BYTE(4));
-		sz_mv = DDL_ALIGN(2 * mb_x * mb_y * 8, DDL_KILO_BYTE(2));
+		sz_mv = DDL_ALIGN(2 * mb_x * 8, DDL_KILO_BYTE(2));
 		if ((codec == VCD_CODEC_MPEG4) ||
 			(codec == VCD_CODEC_H264)) {
 			sz_col_zero = DDL_ALIGN(((mb_x * mb_y + 7) / 8) *
@@ -897,7 +897,7 @@ u32 ddl_allocate_enc_hw_buffers(struct ddl_client_context *ddl)
 				goto fail_enc_free_exit;
 		}
 		if (buf_size.sz_pred > 0) {
-			enc_bufs->pred.mem_type = DDL_MM_MEM;
+			enc_bufs->pred.mem_type = DDL_FW_MEM;
 			ptr = ddl_pmem_alloc(&enc_bufs->pred,
 				buf_size.sz_pred, DDL_KILO_BYTE(2));
 			if (!ptr)
@@ -979,8 +979,9 @@ u32 ddl_check_reconfig(struct ddl_client_context *ddl)
 	if (decoder->cont_mode) {
 		if ((decoder->actual_output_buf_req.sz <=
 			 decoder->client_output_buf_req.sz) &&
-			(decoder->actual_output_buf_req.actual_count <=
-			 decoder->client_output_buf_req.actual_count)) {
+			(decoder->actual_output_buf_req.actual_count +
+                        GRAPHICS_UNUSED_BUFFERS <=
+                        decoder->client_output_buf_req.actual_count)) {
 			need_reconfig = false;
 			if (decoder->min_dpb_num >
 				decoder->min_output_buf_req.min_count) {
@@ -1059,4 +1060,15 @@ void ddl_fill_dec_desc_buffer(struct ddl_client_context *ddl)
 		memcpy(dec_desc_buf->align_virtual_addr,
 			   ip_bitstream->desc_buf,
 			   ip_bitstream->desc_size);
+}
+
+void ddl_set_vidc_timeout(struct ddl_client_context *ddl)
+{
+	u32 vidc_time_out = 0;
+	if (ddl->codec_data.decoder.idr_only_decoding)
+		vidc_time_out = 2 * DDL_VIDC_1080P_200MHZ_TIMEOUT_VALUE;
+	DDL_MSG_HIGH("%s Video core time out value = 0x%x",
+		 __func__, vidc_time_out);
+	vidc_sm_set_video_core_timeout_value(
+		&ddl->shared_mem[ddl->command_channel], vidc_time_out);
 }
